@@ -168,6 +168,31 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Channel access control: add access_mode and creator columns if missing
+    // access_mode: 'public' (default, anyone can join), 'private' (invite only)
+    // creator_pubkey: who created the channel (can generate invites)
+    sqlx::query("ALTER TABLE channels ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'public'")
+        .execute(pool).await.ok(); // ignore if column exists
+    sqlx::query("ALTER TABLE channels ADD COLUMN creator_pubkey BLOB")
+        .execute(pool).await.ok();
+
+    // Invite tokens for private channels
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS channel_invites (
+            token BLOB PRIMARY KEY,
+            channel_id BLOB NOT NULL,
+            created_by BLOB NOT NULL,
+            uses_remaining INTEGER NOT NULL DEFAULT 1,
+            expires_at INTEGER,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (channel_id) REFERENCES channels(id)
+        );
+        "#
+    )
+    .execute(pool)
+    .await?;
+
     info!("Migrations completed successfully");
     Ok(())
 }
@@ -546,15 +571,16 @@ pub async fn create_channel(
     encrypted_metadata: &[u8],
     creator_pubkey: &[u8],
 ) -> Result<()> {
-    // Insert channel
+    // Insert channel with creator and default public access
     sqlx::query(
         r#"
-        INSERT INTO channels (id, encrypted_metadata)
-        VALUES (?1, ?2)
+        INSERT INTO channels (id, encrypted_metadata, creator_pubkey, access_mode)
+        VALUES (?1, ?2, ?3, 'public')
         "#
     )
     .bind(channel_id)
     .bind(encrypted_metadata)
+    .bind(creator_pubkey)
     .execute(pool)
     .await?;
 
@@ -705,4 +731,94 @@ pub async fn get_channel_members_with_keys(
     .await?;
 
     Ok(rows.into_iter().map(|(pk, x)| (pk, x.unwrap_or_default())).collect())
+}
+/// Get channel access mode and creator
+pub async fn get_channel_access(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+) -> Result<Option<(String, Option<Vec<u8>>)>> {
+    let row: Option<(String, Option<Vec<u8>>)> = sqlx::query_as(
+        "SELECT access_mode, creator_pubkey FROM channels WHERE id = ?1"
+    )
+    .bind(channel_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Set channel access mode (only creator can do this)
+pub async fn set_channel_access_mode(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    access_mode: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE channels SET access_mode = ?1 WHERE id = ?2")
+        .bind(access_mode)
+        .bind(channel_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Create an invite token for a private channel
+pub async fn create_invite(
+    pool: &Pool<Sqlite>,
+    token: &[u8],
+    channel_id: &[u8],
+    created_by: &[u8],
+    uses: i64,
+    expires_at: Option<i64>,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO channel_invites (token, channel_id, created_by, uses_remaining, expires_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)
+        "#
+    )
+    .bind(token)
+    .bind(channel_id)
+    .bind(created_by)
+    .bind(uses)
+    .bind(expires_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Consume an invite token. Returns the channel_id if valid.
+pub async fn consume_invite(
+    pool: &Pool<Sqlite>,
+    token: &[u8],
+) -> Result<Option<Vec<u8>>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let row: Option<(Vec<u8>, i64, Option<i64>)> = sqlx::query_as(
+        "SELECT channel_id, uses_remaining, expires_at FROM channel_invites WHERE token = ?1"
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some((channel_id, uses, expires)) => {
+            if uses <= 0 {
+                return Ok(None); // exhausted
+            }
+            if let Some(exp) = expires {
+                if now > exp {
+                    return Ok(None); // expired
+                }
+            }
+            // Decrement uses
+            sqlx::query("UPDATE channel_invites SET uses_remaining = uses_remaining - 1 WHERE token = ?1")
+                .bind(token)
+                .execute(pool)
+                .await?;
+            Ok(Some(channel_id))
+        }
+        None => Ok(None),
+    }
 }

@@ -412,6 +412,8 @@ async fn handle_binary_message(
         "voice_data" => handle_voice_data_raw(data, &msg, conn, state).await,
         "screen_data" => handle_screen_data_raw(data, &msg, conn, state).await,
         "get_ice_config" => handle_get_ice_config(conn, state).await,
+        "set_channel_access" => handle_set_channel_access(&msg, conn, state).await,
+        "create_invite" => handle_create_invite(&msg, conn, state).await,
         "ping" => {
             let pong = rmp_serde::to_vec_named(&serde_json::json!({"type": "pong"}))?;
             conn.tx.send(pong).await?;
@@ -628,17 +630,43 @@ async fn handle_join_channel(
     let user = require_auth(conn)?.clone();
     let channel_id = extract_bytes(msg.get("channel_id"))
         .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let invite_token = extract_bytes(msg.get("invite_token"));
 
-    // Auto-create channel if it doesn't exist
-    let channel_exists: i64 = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM channels WHERE id = ?1"
-    )
-    .bind(&channel_id)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(0);
+    // Check if channel exists
+    let channel_access = database::get_channel_access(&state.db_pool, &channel_id).await?;
 
-    if channel_exists == 0 {
+    if let Some((access_mode, _creator)) = &channel_access {
+        // Channel exists — check access
+        if access_mode == "private" {
+            // Already a member? Allow rejoin silently
+            let is_member = database::is_channel_member(&state.db_pool, &channel_id, &user).await?;
+            if !is_member {
+                // Need a valid invite token
+                if let Some(token) = &invite_token {
+                    let valid = database::consume_invite(&state.db_pool, token).await?;
+                    match valid {
+                        Some(ref invite_channel) if *invite_channel == channel_id => {
+                            // Valid invite — proceed
+                        }
+                        _ => {
+                            let err = rmp_serde::to_vec_named(&serde_json::json!({
+                                "type": "error", "message": "Invalid or expired invite token",
+                            }))?;
+                            conn.tx.send(err).await?;
+                            return Ok(());
+                        }
+                    }
+                } else {
+                    let err = rmp_serde::to_vec_named(&serde_json::json!({
+                        "type": "error", "message": "This channel is private. An invite token is required.",
+                    }))?;
+                    conn.tx.send(err).await?;
+                    return Ok(());
+                }
+            }
+        }
+    } else {
+        // Channel doesn't exist — auto-create as public
         info!("Channel {} does not exist — auto-creating for joiner {}",
             hex::encode(&channel_id[..8.min(channel_id.len())]),
             hex::encode(&user[..8.min(user.len())]));
@@ -910,6 +938,111 @@ async fn handle_get_prekey_count(
         "count": count,
     }))?;
     conn.tx.send(resp).await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Channel access control
+// ---------------------------------------------------------------------------
+
+async fn handle_set_channel_access(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> Result<(), String> {
+    let user = require_auth(conn).map_err(|e| e.to_string())?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| "Missing channel_id".to_string())?;
+    let access_mode = msg.get("access_mode")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Missing access_mode".to_string())?;
+
+    if access_mode != "public" && access_mode != "private" {
+        return Err("access_mode must be 'public' or 'private'".to_string());
+    }
+
+    // Only the channel creator can change access mode
+    let access = database::get_channel_access(&state.db_pool, &channel_id)
+        .await.map_err(|e| e.to_string())?;
+    match access {
+        Some((_mode, Some(ref creator))) if creator == user => {}
+        _ => {
+            let err = rmp_serde::to_vec_named(&serde_json::json!({
+                "type": "error", "message": "Only the channel creator can change access mode",
+            })).map_err(|e| e.to_string())?;
+            conn.tx.send(err).await.map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+    }
+
+    database::set_channel_access_mode(&state.db_pool, &channel_id, access_mode)
+        .await.map_err(|e| e.to_string())?;
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "channel_access_updated",
+        "channel_id": channel_id,
+        "access_mode": access_mode,
+    })).map_err(|e| e.to_string())?;
+    conn.tx.send(response).await.map_err(|e| e.to_string())?;
+
+    info!("Channel {} access mode set to '{}' by {}",
+        hex::encode(&channel_id[..8.min(channel_id.len())]),
+        access_mode,
+        hex::encode(&user[..8.min(user.len())]));
+    Ok(())
+}
+
+async fn handle_create_invite(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> Result<(), String> {
+    let user = require_auth(conn).map_err(|e| e.to_string())?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| "Missing channel_id".to_string())?;
+    let max_uses = msg.get("max_uses").and_then(|v| v.as_i64()).unwrap_or(1);
+    let ttl_seconds = msg.get("ttl_seconds").and_then(|v| v.as_i64());
+
+    // Only channel creator or members can create invites
+    let is_member = database::is_channel_member(&state.db_pool, &channel_id, user)
+        .await.map_err(|e| e.to_string())?;
+    if !is_member {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "You must be a channel member to create invites",
+        })).map_err(|e| e.to_string())?;
+        conn.tx.send(err).await.map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    // Generate a random 32-byte invite token
+    let mut token = [0u8; 32];
+    use rand::rngs::OsRng;
+    use rand::RngCore;
+    OsRng.fill_bytes(&mut token);
+
+    let expires_at = ttl_seconds.map(|ttl| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64 + ttl
+    });
+
+    database::create_invite(&state.db_pool, &token, &channel_id, user, max_uses, expires_at)
+        .await.map_err(|e| e.to_string())?;
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "invite_created",
+        "channel_id": channel_id,
+        "invite_token": hex::encode(token),
+        "max_uses": max_uses,
+        "expires_at": expires_at,
+    })).map_err(|e| e.to_string())?;
+    conn.tx.send(response).await.map_err(|e| e.to_string())?;
+
+    info!("Invite created for channel {} by {} (uses: {}, expires: {:?})",
+        hex::encode(&channel_id[..8.min(channel_id.len())]),
+        hex::encode(&user[..8.min(user.len())]),
+        max_uses, expires_at);
     Ok(())
 }
 
