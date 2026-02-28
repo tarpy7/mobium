@@ -47,4 +47,4 @@ node_modules/
 *.log
 
 # Test artifacts
-test_artifacts/
+test_artifacts/release/
