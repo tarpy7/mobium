@@ -10,72 +10,33 @@ permissions:
   contents: write
 
 jobs:
-  build-server:
+  build-and-release:
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Servers
           - os: ubuntu-latest
+            type: server
             artifact: mobium-server-linux-x86_64
-          - os: ubuntu-24.04-arm
-            artifact: mobium-server-linux-aarch64
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-server-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build server
-        run: cargo build --release -p mobium-server
-
-      - name: Package
-        run: |
-          mkdir -p dist
-          cp target/release/mobium-server dist/${{ matrix.artifact }}
-          cp .env.example dist/
-          cd dist && tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }} .env.example
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.tar.gz
-
-  build-client:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
+          # Clients
           - os: ubuntu-latest
-            target: linux
+            type: client
             artifact: Mobium-linux-x86_64
           - os: windows-latest
-            target: windows
+            type: client
             artifact: Mobium-windows-x86_64
           - os: macos-latest
-            target: macos-arm
+            type: client
             artifact: Mobium-macos-aarch64
           - os: macos-13
-            target: macos-intel
+            type: client
             artifact: Mobium-macos-x86_64
 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -84,117 +45,80 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-client-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ matrix.type }}-${{ hashFiles('**/Cargo.lock') }}
+
+      # --- Server Build ---
+      - name: Build server
+        if: matrix.type == 'server'
+        run: cargo build --release -p mobium-server
+
+      - name: Package server
+        if: matrix.type == 'server'
+        run: |
+          mkdir -p dist
+          cp target/release/mobium-server dist/${{ matrix.artifact }}
+          cp .env.example dist/
+          cd dist && tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }} .env.example
+
+      # --- Client Build ---
+      - uses: actions/setup-node@v4
+        if: matrix.type == 'client'
+        with:
+          node-version: '22'
 
       - name: Install Linux deps
-        if: matrix.target == 'linux'
+        if: matrix.type == 'client' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
-      - name: Install client dependencies
+      - name: Install Tauri CLI
+        if: matrix.type == 'client'
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Install client deps
+        if: matrix.type == 'client'
         working-directory: client
         run: npm ci
 
-      - name: Build Tauri app (Linux)
-        if: matrix.target == 'linux'
+      - name: Build client
+        if: matrix.type == 'client'
         working-directory: client
-        run: npx tauri build
-        env:
-          CI: true
+        run: cargo tauri build
 
-      - name: Build Tauri app (macOS)
-        if: startsWith(matrix.target, 'macos')
-        working-directory: client
-        run: npx tauri build
-        env:
-          CI: true
-
-      - name: Build Tauri app (Windows)
-        if: matrix.target == 'windows'
-        working-directory: client
-        shell: powershell
-        run: npx tauri build
-        env:
-          CI: true
-
-      # Linux: .deb + .AppImage
-      - name: Collect Linux artifacts
-        if: matrix.target == 'linux'
+      - name: Collect client artifacts (Linux)
+        if: matrix.type == 'client' && runner.os == 'Linux'
         run: |
           mkdir -p dist
-          find . -path "*/bundle/deb/*.deb" -exec cp {} dist/${{ matrix.artifact }}.deb \; 2>/dev/null || true
-          find . -path "*/bundle/appimage/*.AppImage" -exec cp {} dist/${{ matrix.artifact }}.AppImage \; 2>/dev/null || true
+          find . -path "*/bundle/deb/*.deb" -exec cp {} dist/${{ matrix.artifact }}.deb \;
+          find . -path "*/bundle/appimage/*.AppImage" -exec cp {} dist/${{ matrix.artifact }}.AppImage \; || true
 
-      # Windows: .msi + NSIS .exe
-      - name: Collect Windows artifacts
-        if: matrix.target == 'windows'
+      - name: Collect client artifacts (Windows)
+        if: matrix.type == 'client' && runner.os == 'Windows'
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Get-ChildItem -Recurse -Filter "*.msi" | Where-Object { $_.FullName -match "bundle" } | ForEach-Object { Copy-Item $_.FullName -Destination "dist/${{ matrix.artifact }}.msi" }
-          Get-ChildItem -Recurse -Filter "*.exe" | Where-Object { $_.FullName -match "bundle[/\\]nsis" } | ForEach-Object { Copy-Item $_.FullName -Destination "dist/${{ matrix.artifact }}-setup.exe" }
+          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Where-Object { $_.FullName -match "bundle" } | Select-Object -First 1
+          if ($msi) { Copy-Item $msi.FullName -Destination "dist/${{ matrix.artifact }}.msi" }
+          $exe = Get-ChildItem -Recurse -Filter "*.exe" | Where-Object { $_.FullName -match "nsis" } | Select-Object -First 1
+          if ($exe) { Copy-Item $exe.FullName -Destination "dist/${{ matrix.artifact }}-setup.exe" }
 
-      # macOS: .dmg
-      - name: Collect macOS artifacts
-        if: startsWith(matrix.target, 'macos')
+      - name: Collect client artifacts (macOS)
+        if: matrix.type == 'client' && runner.os == 'macOS'
         run: |
           mkdir -p dist
-          find . -path "*/bundle/dmg/*.dmg" -exec cp {} dist/${{ matrix.artifact }}.dmg \; 2>/dev/null || true
+          find . -path "*/bundle/dmg/*.dmg" -exec cp {} dist/${{ matrix.artifact }}.dmg \;
 
-      - name: List dist
+      # --- Upload to Release ---
+      - name: List artifacts
         shell: bash
-        run: ls -lhR dist/ 2>/dev/null || echo "No artifacts found"
+        run: ls -lhR dist/ 2>/dev/null || echo "No artifacts"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ matrix.artifact }}
-          path: dist/*
-          if-no-files-found: warn
-
-  release:
-    needs: [build-server, build-client]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Flatten artifacts
-        run: |
-          mkdir -p release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" -o -name "*.dmg" \) -exec cp {} release/ \;
-          ls -lh release/
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: release/*
-          generate_release_notes: true
-          draft: false
-          body: |
-            ## Mobium ${{ github.ref_name }}
-
-            ### Client Downloads
-            | Platform | File |
-            |----------|------|
-            | Linux x86_64 | `.deb` / `.AppImage` |
-            | Windows x86_64 | `.msi` / `-setup.exe` |
-            | macOS Apple Silicon | `.dmg` |
-            | macOS Intel | `.dmg` |
-
-            ### Server
-            | Platform | File |
-            |----------|------|
-            | Linux x86_64 | `mobium-server-linux-x86_64.tar.gz` |
-            | Linux ARM64 | `mobium-server-linux-aarch64.tar.gz` |
-
-            ### Self-Host
-            ```bash
-            tar xzf mobium-server-linux-*.tar.gz
-            cp .env.example .env
-            mkdir -p data
-            ./mobium-server-linux-*
-            ```
+          files: dist/*
+          tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
