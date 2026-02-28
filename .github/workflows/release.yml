@@ -96,8 +96,24 @@ jobs:
         working-directory: client
         run: npm ci
 
-      - name: Build Tauri app
+      - name: Build Tauri app (Linux)
+        if: matrix.target == 'linux'
         working-directory: client
+        run: npx tauri build
+        env:
+          CI: true
+
+      - name: Build Tauri app (macOS)
+        if: startsWith(matrix.target, 'macos')
+        working-directory: client
+        run: npx tauri build
+        env:
+          CI: true
+
+      - name: Build Tauri app (Windows)
+        if: matrix.target == 'windows'
+        working-directory: client
+        shell: powershell
         run: npx tauri build
         env:
           CI: true
@@ -107,8 +123,8 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           mkdir -p dist
-          find target/release/bundle -name "*.deb" -exec cp {} dist/${{ matrix.artifact }}.deb \; 2>/dev/null || true
-          find target/release/bundle -name "*.AppImage" -exec cp {} dist/${{ matrix.artifact }}.AppImage \; 2>/dev/null || true
+          find . -path "*/bundle/deb/*.deb" -exec cp {} dist/${{ matrix.artifact }}.deb \; 2>/dev/null || true
+          find . -path "*/bundle/appimage/*.AppImage" -exec cp {} dist/${{ matrix.artifact }}.AppImage \; 2>/dev/null || true
 
       # Windows: .msi + NSIS .exe
       - name: Collect Windows artifacts
@@ -116,15 +132,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          find target/release/bundle -name "*.msi" -exec cp {} dist/${{ matrix.artifact }}.msi \; 2>/dev/null || true
-          find target/release/bundle -name "*.exe" -exec cp {} dist/${{ matrix.artifact }}-setup.exe \; 2>/dev/null || true
+          find . -path "*/bundle/msi/*.msi" -exec cp {} dist/${{ matrix.artifact }}.msi \; 2>/dev/null || true
+          find . -path "*/bundle/nsis/*.exe" -exec cp {} dist/${{ matrix.artifact }}-setup.exe \; 2>/dev/null || true
 
       # macOS: .dmg
       - name: Collect macOS artifacts
         if: startsWith(matrix.target, 'macos')
         run: |
           mkdir -p dist
-          find target/release/bundle -name "*.dmg" -exec cp {} dist/${{ matrix.artifact }}.dmg \; 2>/dev/null || true
+          find . -path "*/bundle/dmg/*.dmg" -exec cp {} dist/${{ matrix.artifact }}.dmg \; 2>/dev/null || true
 
       - name: List dist
         run: ls -lh dist/ || echo "No artifacts"
