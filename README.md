@@ -6,7 +6,7 @@ The server is blind by design — it routes encrypted blobs and nothing more. Se
 
 ## What is this?
 
-Mobium is a Discord-like communication platform where every message, voice call, and file transfer is end-to-end encrypted using the Signal Protocol. The server mathematically cannot decrypt your content.
+Mobium is a community-oriented communication platform where every message, voice call, and file transfer is end-to-end encrypted using proven cryptographic primitives. The server mathematically cannot decrypt your content.
 
 **Server:** Rust (Axum) · SQLite · ~9MB RAM  
 **Client:** Tauri v2 · Svelte 5 · TypeScript  
@@ -14,7 +14,7 @@ Mobium is a Discord-like communication platform where every message, voice call,
 
 ## Features
 
-- **Encrypted DMs** — Signal Double Ratchet with forward secrecy
+- **Encrypted DMs** — Double Ratchet with forward secrecy
 - **Group Channels** — Sender Keys with bucket padding (server can't see message sizes)
 - **Voice Calls** — P2P WebRTC (DMs) / AES-256-GCM encrypted relay (channels)
 - **Screen Sharing** — P2P or encrypted server-relay, 360p–1080p
@@ -79,7 +79,7 @@ Pre-built binaries: [Releases](https://github.com/tarpy7/mobium/releases)
 | Identity | Ed25519 signing + X25519 encryption |
 | Key Exchange | X3DH (Extended Triple Diffie-Hellman) |
 | DM Encryption | Double Ratchet (forward secrecy) |
-| Group Encryption | Signal Sender Keys |
+| Group Encryption | Sender Keys |
 | Symmetric | AES-256-GCM |
 | KDF | Argon2id (password) · HKDF-SHA256 (keys) |
 | Message Padding | Bucket padding (hides message sizes) |

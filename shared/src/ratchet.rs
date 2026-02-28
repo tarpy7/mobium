@@ -1,6 +1,6 @@
 //! Double Ratchet Algorithm
 //!
-//! Implementation of Signal's Double Ratchet for forward secrecy
+//! Implementation of the Double Ratchet algorithm for forward secrecy
 //! and future secrecy in ongoing conversations.
 //!
 //! Follows the specification at:
@@ -163,7 +163,7 @@ pub struct RatchetState {
 /// - Restored from the serialized `RatchetState` during `load`.
 /// - Explicitly zeroized in the `Drop` implementation.
 ///
-/// This mirrors how Signal's reference implementations handle the same
+/// This mirrors how standard reference implementations handle the same
 /// limitation — the raw bytes and the opaque secret have identical
 /// lifetimes and are cleaned up together.
 pub struct DoubleRatchet {

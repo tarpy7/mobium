@@ -1,6 +1,6 @@
 //! X3DH (Extended Triple Diffie-Hellman) Key Agreement
 //!
-//! Implementation of Signal's X3DH protocol for initial key exchange.
+//! Implementation of the X3DH protocol for initial key exchange.
 //! Provides mutual authentication and forward secrecy.
 //!
 //! <https://signal.org/docs/specifications/x3dh/>

@@ -4,7 +4,7 @@ This document details the cryptographic protocols used in Mobium.
 
 ## Overview
 
-Mobium implements the Signal Protocol with the following primitives:
+Mobium implements the X3DH + Double Ratchet protocol with the following primitives:
 
 - **X3DH** (Extended Triple Diffie-Hellman): Initial key agreement
 - **Double Ratchet**: Forward secrecy and future secrecy
@@ -253,7 +253,7 @@ Sensitive data is cleared from memory:
 
 ## Sender Keys (Group / Channel Encryption)
 
-For channel messages, Mobium uses **Signal-style Sender Keys** instead
+For channel messages, Mobium uses **Sender Keys** instead
 of pairwise Double Ratchets. Each group member maintains their own
 symmetric ratchet chain. When sending, you advance YOUR chain and encrypt;
 all other members hold a copy of your chain key so they can derive the same
@@ -384,7 +384,7 @@ Backward compatibility within major version.
 
 ## References
 
-1. **Signal Protocol**: https://signal.org/docs/
+1. **X3DH + Double Ratchet protocol**: https://signal.org/docs/
 2. **X3DH**: https://signal.org/docs/specifications/x3dh/
 3. **Double Ratchet**: https://signal.org/docs/specifications/doubleratchet/
 4. **Sender Keys**: https://signal.org/docs/specifications/group-v2/

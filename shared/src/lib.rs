@@ -1,7 +1,7 @@
 //! Mobium Cryptographic Primitives
 //!
 //! This crate provides the cryptographic foundation for Mobium,
-//! implementing Signal Protocol primitives, X3DH handshake, and Double Ratchet.
+//! implementing cryptographic primitives, X3DH handshake, and Double Ratchet.
 
 #![warn(missing_docs)]
 #![warn(unsafe_code)]

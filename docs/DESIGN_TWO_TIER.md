@@ -18,7 +18,7 @@ Mobium evolves from a single self-hosted server into two deployment tiers sharin
 
 - **Audience**: Larger communities, public channels, friends-of-friends discovery
 - **Hosted by**: Mobium (the company/project)
-- **Philosophy**: Full-featured Discord alternative with zero-knowledge encryption
+- **Philosophy**: Full-featured encrypted communication platform with zero-knowledge encryption
 - **Features**: Everything in Community + account system, user discovery, public channels, moderation tools, managed STUN/TURN
 - **Database**: PostgreSQL (concurrent writes, horizontal scaling readiness)
 - **Scale target**: Start single-instance, design for eventual horizontal scaling
@@ -240,7 +240,7 @@ The current system uses Ed25519 public keys as the sole identity. For the manage
 
 ### Recommendation
 
-Option A is more aligned with Mobium's zero-knowledge identity. Signal chose phone numbers because they needed a social graph bootstrap mechanism — Mobium could use invite links or QR codes instead. The username-to-pubkey mapping can be made auditable (signed by the user's key).
+Option A is more aligned with Mobium's zero-knowledge identity. Phone-number-based messengers chose phone numbers because they needed a social graph bootstrap mechanism — Mobium could use invite links or QR codes instead. The username-to-pubkey mapping can be made auditable (signed by the user's key).
 
 ---
 

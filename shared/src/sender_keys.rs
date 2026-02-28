@@ -1,4 +1,4 @@
-//! Sender Keys for Group Messaging (Signal-style)
+//! Sender Keys for Group Messaging
 //!
 //! Each group member maintains their own symmetric ratchet chain.
 //! When sending to a group, you advance YOUR chain and encrypt with the derived message key.

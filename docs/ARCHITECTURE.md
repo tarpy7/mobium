@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mobium is a mathematically secure, self-hosted Discord alternative with zero-knowledge architecture. The server cannot decrypt any communications, and no account recovery is possible without the user's BIP39 mnemonic phrase.
+Mobium is a mathematically secure, self-hosted encrypted communication platform with zero-knowledge architecture. The server cannot decrypt any communications, and no account recovery is possible without the user's BIP39 mnemonic phrase.
 
 ## System Architecture
 
@@ -78,8 +78,8 @@ Mobium is a mathematically secure, self-hosted Discord alternative with zero-kno
 **Cryptographic Primitives**:
 - **Identity**: Ed25519 signing keys
 - **Encryption**: X25519 for ECDH, AES-256-GCM for symmetric encryption
-- **DM Protocol**: Signal Double Ratchet for forward secrecy
-- **Channel Protocol**: Signal Sender Keys (HMAC-SHA256 chain ratchet + AES-256-GCM)
+- **DM Protocol**: Double Ratchet for forward secrecy
+- **Channel Protocol**: Sender Keys (HMAC-SHA256 chain ratchet + AES-256-GCM)
 - **Voice Encryption**: Stable AES-256-GCM keys derived from Sender Key seed (never advances text chain)
 - **Key Derivation**: Argon2id (passwords), HMAC-SHA256 (chain keys, voice keys)
 - **Padding**: Bucket padding (14 size buckets, 512B to 4MB) for size masking
@@ -146,7 +146,7 @@ docker-compose up -d
 
 ## Protocol Versions
 
-- **v1**: Initial release with Signal Protocol
+- **v1**: Initial release with X3DH + Double Ratchet protocol
 - Support for: X3DH, Double Ratchet, offline messages
 
 ## Completed Phases
