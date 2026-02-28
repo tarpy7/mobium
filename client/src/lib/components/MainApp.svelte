@@ -55,7 +55,15 @@
 
 <div class="flex h-full">
 	<!-- Sidebar -->
-	<Sidebar on:connect={toggleConnectionModal} />
+	<Sidebar on:connect={toggleConnectionModal} on:locked={() => {
+		// Navigate back to login screen by resetting identity store
+		import('$lib/stores').then(m => {
+			m.identityStore.set({ pubkey: null, mnemonic: null });
+			m.connectionStore.set({ connected: false, serverUrl: null });
+			m.conversationsStore.set([]);
+			m.activeConversationStore.set(null);
+		});
+	}} />
 
 	<!-- Main Chat Area -->
 	<div class="flex-1 flex flex-col bg-background">

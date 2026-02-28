@@ -126,6 +126,9 @@ fn main() {
             commands::publish_prekeys,
             commands::has_dm_session,
             
+            // Profile lock
+            commands::lock_profile,
+            
             // Social recovery
             commands::setup_social_recovery,
             commands::reconstruct_from_shards,

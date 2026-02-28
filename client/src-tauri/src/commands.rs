@@ -702,6 +702,33 @@ async fn _reset_identity(state: State<'_, AppState>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Lock the current profile — wipes all cryptographic material from memory.
+///
+/// After locking, the user must re-enter their password to unlock.
+/// This disconnects the WebSocket and clears all in-memory secrets.
+#[tauri::command]
+pub async fn lock_profile(state: State<'_, AppState>) -> Result<(), String> {
+    // Disconnect WebSocket first
+    {
+        let mut conn_guard = state.connection.write().await;
+        *conn_guard = None;
+    }
+
+    // Close DB pool
+    {
+        let mut db_guard = state.db.write().await;
+        if let Some(pool) = db_guard.take() {
+            pool.close().await;
+        }
+    }
+
+    // Zeroize all cryptographic material
+    state.lock_profile().await;
+
+    tracing::info!("Profile locked via Tauri command");
+    Ok(())
+}
+
 /// Setup social recovery
 #[tauri::command]
 pub async fn setup_social_recovery(
@@ -1119,7 +1146,7 @@ pub async fn create_channel(
     
     // Generate a random channel ID (32 bytes)
     let mut channel_id = [0u8; 32];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut channel_id);
+    rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut channel_id);
     let channel_hex = hex::encode(&channel_id);
     
     // Encrypt metadata (channel name) with the DB key for local storage,

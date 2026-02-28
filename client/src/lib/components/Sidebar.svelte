@@ -307,6 +307,20 @@
 				</button>
 			</div>
 			<button
+				onclick={async () => {
+					try {
+						await invoke('lock_profile');
+						showSettings = false;
+						dispatch('locked');
+					} catch (e) {
+						console.error('Failed to lock profile:', e);
+					}
+				}}
+				class="w-full rounded-lg bg-danger/20 px-3 py-1.5 text-xs text-danger hover:bg-danger/30 mb-2"
+			>
+				🔒 Lock Profile
+			</button>
+			<button
 				onclick={() => { showSettings = false; }}
 				class="w-full rounded-lg bg-surface-light px-3 py-1.5 text-xs text-text-muted hover:text-text"
 			>
