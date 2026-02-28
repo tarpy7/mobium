@@ -1,10 +1,10 @@
 [package]
 name = "mobium-client"
 version = "0.1.0"
-description = "Mobium - Zero-Knowledge Discord Alternative"
+description = "Mobium - Zero-Knowledge Encrypted Communication"
 authors = ["Mobium Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/mobium/mobium"
+repository = "https://github.com/tarpy7/mobium"
 edition = "2021"
 rust-version = "1.70"
 
