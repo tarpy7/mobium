@@ -629,8 +629,8 @@ impl rand::CryptoRng for FixedRng {}
 ///
 /// HMAC-SHA256 based HKDF-like construction:
 ///   PRK  = HMAC(root_key, dh_output)
-///   RK'  = HMAC(PRK, "SecureComm-v1-RK" || 0x01)
-///   CK   = HMAC(PRK, "SecureComm-v1-CK" || 0x02)
+///   RK'  = HMAC(PRK, "Mobium-v1-RK" || 0x01)
+///   CK   = HMAC(PRK, "Mobium-v1-CK" || 0x02)
 fn kdf_rk(root_key: &[u8; 32], dh_output: &[u8]) -> Result<([u8; 32], [u8; 32])> {
     // Extract
     let mut mac = <HmacSha256 as Mac>::new_from_slice(root_key)
@@ -641,14 +641,14 @@ fn kdf_rk(root_key: &[u8; 32], dh_output: &[u8]) -> Result<([u8; 32], [u8; 32])>
     // Expand — root key
     let mut mac = <HmacSha256 as Mac>::new_from_slice(&prk)
         .map_err(|e| CryptoError::KeyDerivationError(e.to_string()))?;
-    mac.update(b"SecureComm-v1-RK");
+    mac.update(b"Mobium-v1-RK");
     mac.update(&[0x01]);
     let new_rk: [u8; 32] = mac.finalize().into_bytes().into();
 
     // Expand — chain key
     let mut mac = <HmacSha256 as Mac>::new_from_slice(&prk)
         .map_err(|e| CryptoError::KeyDerivationError(e.to_string()))?;
-    mac.update(b"SecureComm-v1-CK");
+    mac.update(b"Mobium-v1-CK");
     mac.update(&[0x02]);
     let ck: [u8; 32] = mac.finalize().into_bytes().into();
 

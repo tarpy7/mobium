@@ -5,23 +5,23 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    container_name: securecomm-server
+    container_name: mobium-server
     restart: unless-stopped
     ports:
       - "8443:8443"
     environment:
       - SC_HOST=0.0.0.0
       - SC_PORT=8443
-      - SC_DATABASE_URL=sqlite:///data/securecomm.db
+      - SC_DATABASE_URL=sqlite:///data/mobium.db
       - SC_TLS_CERT=/app/certs/cert.pem
       - SC_TLS_KEY=/app/certs/key.pem
       - SC_REQUIRE_TLS=true
-      - RUST_LOG=securecomm_server=debug,axum=info
+      - RUST_LOG=mobium_server=debug,axum=info
     volumes:
       - ./data:/data
       - ./certs:/app/certs:ro
     networks:
-      - securecomm
+      - mobium
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
       interval: 30s
@@ -33,7 +33,7 @@ services:
   # Uncomment if you prefer to handle TLS at the proxy level
   # caddy:
   #   image: caddy:2-alpine
-  #   container_name: securecomm-caddy
+  #   container_name: mobium-caddy
   #   restart: unless-stopped
   #   ports:
   #     - "80:80"
@@ -43,12 +43,12 @@ services:
   #     - caddy_data:/data
   #     - caddy_config:/config
   #   networks:
-  #     - securecomm
+  #     - mobium
   #   depends_on:
   #     - server
 
 networks:
-  securecomm:
+  mobium:
     driver: bridge
 
 volumes:

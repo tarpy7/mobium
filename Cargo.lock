@@ -2651,6 +2651,109 @@ dependencies = [
 ]
 
 [[package]]
+name = "mobium-client"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
+ "chrono",
+ "dirs 5.0.1",
+ "ed25519-dalek",
+ "futures",
+ "hex",
+ "hmac",
+ "mobium-shared",
+ "once_cell",
+ "rand 0.8.5",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite 0.21.0",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "x25519-dalek",
+ "zeroize",
+]
+
+[[package]]
+name = "mobium-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-server",
+ "chrono",
+ "config",
+ "dashmap",
+ "dotenvy",
+ "ed25519-dalek",
+ "futures",
+ "futures-util",
+ "hex",
+ "mobium-shared",
+ "once_cell",
+ "rand 0.8.5",
+ "rcgen",
+ "reqwest 0.12.28",
+ "rmp-serde",
+ "rustls 0.23.36",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "subtle",
+ "thiserror 1.0.69",
+ "tikv-jemallocator",
+ "tokio",
+ "tokio-rustls 0.26.4",
+ "tokio-test",
+ "tokio-tungstenite 0.21.0",
+ "tokio-util",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "mobium-shared"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "bip39",
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex",
+ "hmac",
+ "pbkdf2",
+ "rand 0.8.5",
+ "ring",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "thiserror 1.0.69",
+ "tokio-test",
+ "tracing",
+ "x25519-dalek",
+ "zerocopy",
+ "zeroize",
+]
+
+[[package]]
 name = "muda"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4255,109 +4358,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "securecomm-client"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "chrono",
- "dirs 5.0.1",
- "ed25519-dalek",
- "futures",
- "hex",
- "hmac",
- "once_cell",
- "rand 0.8.5",
- "rmp-serde",
- "securecomm-shared",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-shell",
- "thiserror 1.0.69",
- "tokio",
- "tokio-tungstenite 0.21.0",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
- "x25519-dalek",
- "zeroize",
-]
-
-[[package]]
-name = "securecomm-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-server",
- "chrono",
- "config",
- "dashmap",
- "dotenvy",
- "ed25519-dalek",
- "futures",
- "futures-util",
- "hex",
- "once_cell",
- "rand 0.8.5",
- "rcgen",
- "reqwest 0.12.28",
- "rmp-serde",
- "rustls 0.23.36",
- "rustls-pemfile",
- "securecomm-shared",
- "serde",
- "serde_json",
- "sqlx",
- "subtle",
- "thiserror 1.0.69",
- "tikv-jemallocator",
- "tokio",
- "tokio-rustls 0.26.4",
- "tokio-test",
- "tokio-tungstenite 0.21.0",
- "tokio-util",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "securecomm-shared"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "argon2",
- "bip39",
- "curve25519-dalek",
- "ed25519-dalek",
- "hex",
- "hmac",
- "pbkdf2",
- "rand 0.8.5",
- "ring",
- "rmp-serde",
- "serde",
- "serde_json",
- "sha2",
- "subtle",
- "thiserror 1.0.69",
- "tokio-test",
- "tracing",
- "x25519-dalek",
- "zerocopy",
- "zeroize",
-]
 
 [[package]]
 name = "security-framework"

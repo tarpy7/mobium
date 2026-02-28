@@ -169,7 +169,7 @@ pub struct SenderKeyDistribution {
 fn derive_voice_key(initial_seed: &[u8; 32], key_id: u32) -> [u8; 32] {
     let mut mac =
         <HmacSha256 as Mac>::new_from_slice(initial_seed).expect("HMAC accepts any key length");
-    mac.update(b"Discable-voice-v1");
+    mac.update(b"Mobium-voice-v1");
     mac.update(&key_id.to_be_bytes());
     let result = mac.finalize().into_bytes();
     let mut key = [0u8; 32];

@@ -1,8 +1,8 @@
-# Discable Two-Tier Server Architecture
+# Mobium Two-Tier Server Architecture
 
 ## 1. Vision & Principles
 
-Discable evolves from a single self-hosted server into two deployment tiers sharing one codebase:
+Mobium evolves from a single self-hosted server into two deployment tiers sharing one codebase:
 
 ### Community Server (Self-Hosted)
 
@@ -14,10 +14,10 @@ Discable evolves from a single self-hosted server into two deployment tiers shar
 - **Scale target**: ~50-200 concurrent users per instance
 - **ICE/TURN**: User chooses — self-hosted coturn, Google STUN, or opt-in to managed TURN service
 
-### Managed Server ("Discable Cloud")
+### Managed Server ("Mobium Cloud")
 
 - **Audience**: Larger communities, public channels, friends-of-friends discovery
-- **Hosted by**: Discable (the company/project)
+- **Hosted by**: Mobium (the company/project)
 - **Philosophy**: Full-featured Discord alternative with zero-knowledge encryption
 - **Features**: Everything in Community + account system, user discovery, public channels, moderation tools, managed STUN/TURN
 - **Database**: PostgreSQL (concurrent writes, horizontal scaling readiness)
@@ -87,10 +87,10 @@ server/src/
 
 ```bash
 # Community server (default — what users compile today)
-cargo build --release -p securecomm-server
+cargo build --release -p mobium-server
 
 # Managed server (with all managed-tier features)
-cargo build --release -p securecomm-server --features managed --no-default-features
+cargo build --release -p mobium-server --features managed --no-default-features
 ```
 
 ---
@@ -240,7 +240,7 @@ The current system uses Ed25519 public keys as the sole identity. For the manage
 
 ### Recommendation
 
-Option A is more aligned with Discable's zero-knowledge identity. Signal chose phone numbers because they needed a social graph bootstrap mechanism — Discable could use invite links or QR codes instead. The username-to-pubkey mapping can be made auditable (signed by the user's key).
+Option A is more aligned with Mobium's zero-knowledge identity. Signal chose phone numbers because they needed a social graph bootstrap mechanism — Mobium could use invite links or QR codes instead. The username-to-pubkey mapping can be made auditable (signed by the user's key).
 
 ---
 
@@ -289,7 +289,7 @@ SC_ICE_TURN_SECRET=shared-secret-with-coturn
 # Option 2: Google STUN only (no TURN, ~85-90% success rate)
 SC_ICE_STUN_URL=stun:stun.l.google.com:19302
 
-# Option 3: Use Discable managed TURN (when available)
+# Option 3: Use Mobium managed TURN (when available)
 SC_ICE_MANAGED_TURN=true
 SC_ICE_MANAGED_API_KEY=your-api-key
 ```
@@ -581,7 +581,7 @@ The `/info` endpoint is extended to advertise the server type and available feat
 
 ```json
 {
-    "name": "Discable Server",
+    "name": "Mobium Server",
     "protocol_version": 2,
     "server_type": "community",
     "capabilities": [
@@ -594,7 +594,7 @@ The `/info` endpoint is extended to advertise the server type and available feat
 For managed:
 ```json
 {
-    "name": "Discable Cloud",
+    "name": "Mobium Cloud",
     "protocol_version": 2,
     "server_type": "managed",
     "capabilities": [
@@ -716,7 +716,7 @@ Both `voice.ts` (DM WebRTC) and `channelVoice.ts` use `getIceConfig()` when crea
 # ── Existing ──────────────────────────────────────────────
 SC_HOST=0.0.0.0
 SC_PORT=8443
-SC_DATABASE_URL=sqlite://./data/discable.db
+SC_DATABASE_URL=sqlite://./data/mobium.db
 SC_TLS_CERT=/path/to/cert.pem
 SC_TLS_KEY=/path/to/key.pem
 SC_REQUIRE_TLS=true
@@ -741,7 +741,7 @@ SC_ICE_TTL=86400                                # credential lifetime (seconds)
 
 ```bash
 # ── Database (PostgreSQL) ─────────────────────────────────
-SC_DATABASE_URL=postgres://user:pass@localhost/discable
+SC_DATABASE_URL=postgres://user:pass@localhost/mobium
 
 # ── Redis (for horizontal scaling, optional at first) ─────
 SC_REDIS_URL=redis://localhost:6379
@@ -755,9 +755,9 @@ SC_USERNAME_MIN_LENGTH=3
 SC_MODERATOR_PUBKEYS=hex1,hex2,hex3            # comma-separated Ed25519 pubkeys
 
 # ── Managed TURN ──────────────────────────────────────────
-SC_ICE_TURN_URL=turn:turn.discable.io:3478
+SC_ICE_TURN_URL=turn:turn.mobium.io:3478
 SC_ICE_TURN_SECRET=managed-coturn-shared-secret
-SC_ICE_STUN_URL=stun:stun.discable.io:3478
+SC_ICE_STUN_URL=stun:stun.mobium.io:3478
 ```
 
 ---

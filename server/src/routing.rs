@@ -56,7 +56,7 @@ async fn health_check() -> &'static str {
 /// Server info — only protocol version (no version/feature leakage)
 async fn server_info() -> Json<serde_json::Value> {
     Json(serde_json::json!({
-        "name": "SecureComm Server",
+        "name": "Mobium Server",
         "protocol_version": 1,
     }))
 }

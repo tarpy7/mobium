@@ -13,19 +13,19 @@ mod state;
 
 use state::AppState;
 
-/// Get the Discable base data directory.
+/// Get the Mobium base data directory.
 ///
-/// Checks the `DISCABLE_DATA_DIR` environment variable first, then falls back
-/// to the OS data directory (`%APPDATA%/SecureComm` on Windows).
+/// Checks the `MOBIUM_DATA_DIR` environment variable first, then falls back
+/// to the OS data directory (`%APPDATA%/Mobium` on Windows).
 ///
 /// This returns the **base** directory. Profile-specific data lives in
 /// subdirectories (e.g., `base/Alice/`, `base/Bob/`).
-pub fn discable_data_dir() -> anyhow::Result<std::path::PathBuf> {
-    if let Ok(custom) = std::env::var("DISCABLE_DATA_DIR") {
+pub fn mobium_data_dir() -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(custom) = std::env::var("MOBIUM_DATA_DIR") {
         Ok(std::path::PathBuf::from(custom))
     } else {
         dirs::data_dir()
-            .map(|d| d.join("SecureComm"))
+            .map(|d| d.join("Mobium"))
             .ok_or_else(|| anyhow::anyhow!("Could not find data directory"))
     }
 }
@@ -34,8 +34,8 @@ pub fn discable_data_dir() -> anyhow::Result<std::path::PathBuf> {
 ///
 /// Returns `base_data_dir / profile_name`. Panics if no profile is selected
 /// (callers must ensure `select_profile` was called first).
-pub async fn discable_profile_dir(state: &AppState) -> anyhow::Result<std::path::PathBuf> {
-    let base = discable_data_dir()?;
+pub async fn mobium_profile_dir(state: &AppState) -> anyhow::Result<std::path::PathBuf> {
+    let base = mobium_data_dir()?;
     let profile_guard = state.active_profile.read().await;
     match profile_guard.as_ref() {
         Some(name) => Ok(base.join(name)),
@@ -56,7 +56,7 @@ fn main() {
     // Initialize tracing
     tracing_subscriber::fmt::init();
     
-    info!("Starting SecureComm client v{}", env!("CARGO_PKG_VERSION"));
+    info!("Starting Mobium client v{}", env!("CARGO_PKG_VERSION"));
     
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

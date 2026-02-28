@@ -54,7 +54,7 @@
 <div class="flex h-full items-center justify-center bg-background p-8">
 	<div class="w-full max-w-md rounded-xl bg-surface p-8 shadow-2xl">
 		<div class="text-center mb-8">
-			<div class="mb-2 text-4xl font-bold text-primary">Discable</div>
+			<div class="mb-2 text-4xl font-bold text-primary">Mobium</div>
 			<div class="text-text-muted">Welcome back</div>
 		</div>
 

@@ -8,7 +8,7 @@
 //! - BIP39 recovery
 //! - Shamir's Secret Sharing
 
-use securecomm_shared::*;
+use mobium_shared::*;
 
 // ============================================================================
 // Identity Key Tests

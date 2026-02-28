@@ -1,4 +1,4 @@
-# Discable
+# Mobium
 
 A zero-knowledge encrypted messaging platform. Self-host your own server or connect to a managed instance -- the server never sees your messages, keys, or content.
 
@@ -28,8 +28,8 @@ The server stores and routes encrypted blobs. It cannot decrypt anything. There 
 ### Option A: Docker (Recommended)
 
 ```bash
-git clone https://github.com/anomalyco/Discable.git
-cd Discable
+git clone https://github.com/anomalyco/Mobium.git
+cd Mobium
 
 # Create data directory
 mkdir -p data
@@ -45,16 +45,16 @@ curl http://localhost:8443/health
 # → OK
 ```
 
-The server is now running at `ws://localhost:8443/ws`. Point the Discable client at your server's IP/domain.
+The server is now running at `ws://localhost:8443/ws`. Point the Mobium client at your server's IP/domain.
 
 ### Option B: Build from Source
 
 ```bash
-git clone https://github.com/anomalyco/Discable.git
-cd Discable
+git clone https://github.com/anomalyco/Mobium.git
+cd Mobium
 
 # Build the server (release mode, optimized)
-cargo build --release -p securecomm-server
+cargo build --release -p mobium-server
 
 # Create data directory
 mkdir -p data
@@ -63,7 +63,7 @@ mkdir -p data
 cp .env.example .env
 
 # Run (reads .env automatically)
-./target/release/securecomm-server
+./target/release/mobium-server
 ```
 
 ### Option C: Raspberry Pi 5
@@ -72,16 +72,16 @@ cp .env.example .env
 # On the Pi (64-bit Raspberry Pi OS)
 sudo apt install -y build-essential pkg-config libssl-dev libsqlite3-dev
 
-git clone https://github.com/anomalyco/Discable.git
-cd Discable
+git clone https://github.com/anomalyco/Mobium.git
+cd Mobium
 
 # Build with size optimization (strip + LTO)
-cargo build --profile release-small -p securecomm-server
+cargo build --profile release-small -p mobium-server
 
 # Run
 mkdir -p data
 cp .env.example .env
-./target/release-small/securecomm-server
+./target/release-small/mobium-server
 ```
 
 The server uses jemalloc on Linux automatically for reduced memory fragmentation.
@@ -109,7 +109,7 @@ SC_REQUIRE_TLS=true
 
 Once the server is running, [build the client](#client-quickstart) and connect:
 
-1. Launch the Discable client and create a new identity
+1. Launch the Mobium client and create a new identity
 2. **Write down your 24-word recovery phrase** -- there is no other way to recover your identity
 3. Enter your server URL (e.g., `wss://your-domain.com` or `ws://192.168.1.50:8443`)
 4. The client authenticates via Ed25519 challenge-response -- no passwords sent to the server
@@ -120,7 +120,7 @@ See the [Client Quickstart](#client-quickstart) below for full setup instruction
 
 ## Client Quickstart
 
-The Discable client is a native desktop app built with Tauri v2 (Rust backend) and Svelte 5 (frontend). It runs on Windows, macOS, and Linux.
+The Mobium client is a native desktop app built with Tauri v2 (Rust backend) and Svelte 5 (frontend). It runs on Windows, macOS, and Linux.
 
 ### Prerequisites
 
@@ -166,7 +166,7 @@ npm install
 npm run tauri dev
 ```
 
-This starts the Vite dev server with hot-reload and opens the Discable window. The Rust backend recompiles automatically when you change `.rs` files.
+This starts the Vite dev server with hot-reload and opens the Mobium window. The Rust backend recompiles automatically when you change `.rs` files.
 
 ### Build for Production
 
@@ -186,7 +186,7 @@ This produces native installers in `client/src-tauri/target/release/bundle/`:
 
 ### First Launch Walkthrough
 
-1. **Profile selection** -- If this is your first time, you'll be prompted to create a profile. Each profile has its own identity and data, stored in your OS data directory (`%APPDATA%/SecureComm` on Windows, `~/.local/share/SecureComm` on Linux, `~/Library/Application Support/SecureComm` on macOS). You can override the location with the `DISCABLE_DATA_DIR` environment variable.
+1. **Profile selection** -- If this is your first time, you'll be prompted to create a profile. Each profile has its own identity and data, stored in your OS data directory (`%APPDATA%/Mobium` on Windows, `~/.local/share/Mobium` on Linux, `~/Library/Application Support/Mobium` on macOS). You can override the location with the `MOBIUM_DATA_DIR` environment variable.
 
 2. **Create or import identity** -- Choose "Create New Identity" to generate a fresh Ed25519 keypair, or "Import from Recovery Phrase" if you have an existing 24-word BIP39 mnemonic.
 
@@ -210,7 +210,7 @@ The client has minimal configuration. Most settings are managed through the UI.
 
 | Setting | How to Configure |
 |---------|-----------------|
-| Data directory | `DISCABLE_DATA_DIR` env var (default: OS app data) |
+| Data directory | `MOBIUM_DATA_DIR` env var (default: OS app data) |
 | Server URL | Entered in the connection modal, remembered across sessions |
 | Nicknames | Set per-contact in the UI, stored in local encrypted DB |
 | Profiles | Created/selected in the profile picker on launch |
@@ -235,7 +235,7 @@ All server configuration is via environment variables (or `.env` file). See `.en
 |----------|---------|-------------|
 | `SC_HOST` | `0.0.0.0` | Bind address |
 | `SC_PORT` | `8443` | Listen port |
-| `SC_DATABASE_URL` | `sqlite://./data/securecomm.db` | SQLite database path |
+| `SC_DATABASE_URL` | `sqlite://./data/mobium.db` | SQLite database path |
 | `SC_REQUIRE_TLS` | `true` | Reject connections without TLS |
 | `SC_TLS_CERT` | *(none)* | Path to TLS certificate |
 | `SC_TLS_KEY` | *(none)* | Path to TLS private key |
@@ -313,7 +313,7 @@ Client A                          Server                        Client B
 ### Project Structure
 
 ```
-Discable/
+Mobium/
   shared/                  Rust crypto library (X3DH, Double Ratchet, Sender Keys)
   server/                  Axum WebSocket server (SQLite, message routing, voice relay)
   client/
@@ -408,10 +408,10 @@ publish_prekeys, get_prekey_bundle, get_prekey_count
 
 ```bash
 # Shared crypto library (90 tests: unit, crypto, edge cases, protocol)
-cargo test -p securecomm-shared
+cargo test -p mobium-shared
 
 # Server
-cargo test -p securecomm-server
+cargo test -p mobium-server
 
 # All workspace crates
 cargo test --workspace

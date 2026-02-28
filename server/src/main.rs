@@ -24,12 +24,12 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("securecomm_server=debug".parse()?)
+                .add_directive("mobium_server=debug".parse()?)
                 .add_directive("axum=info".parse()?),
         )
         .init();
 
-    info!("Starting SecureComm server");
+    info!("Starting Mobium server");
 
     let config = ServerConfig::from_env()?;
     info!("Configuration loaded");

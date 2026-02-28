@@ -9,7 +9,7 @@
   "bundle": {
     "active": true,
     "category": "SocialNetworking",
-    "copyright": "2025 Discable Contributors",
+    "copyright": "2025 Mobium Contributors",
     "icon": [],
     "targets": "all",
     "windows": {
@@ -18,8 +18,8 @@
       "timestampUrl": ""
     }
   },
-  "identifier": "com.discable.app",
-  "productName": "Discable",
+  "identifier": "com.mobium.app",
+  "productName": "Mobium",
   "version": "0.1.0",
   "plugins": {
     "shell": {
@@ -35,7 +35,7 @@
         "fullscreen": false,
         "height": 800,
         "resizable": true,
-        "title": "Discable",
+        "title": "Mobium",
         "width": 1200
       }
     ]

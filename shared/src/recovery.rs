@@ -51,7 +51,7 @@ pub fn derive_identity_seed(bip39_seed: &[u8; 64]) -> Result<[u8; 32]> {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    let mut mac = HmacSha256::new_from_slice(b"SecureComm-Identity-Derivation")
+    let mut mac = HmacSha256::new_from_slice(b"Mobium-Identity-Derivation")
         .map_err(|e| CryptoError::KeyDerivationError(e.to_string()))?;
     mac.update(bip39_seed);
     let result = mac.finalize().into_bytes();

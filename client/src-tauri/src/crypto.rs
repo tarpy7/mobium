@@ -1,7 +1,7 @@
 //! Cryptographic operations and secure storage
 
 use anyhow::Result;
-use securecomm_shared::IdentityKey;
+use mobium_shared::IdentityKey;
 use sha2::{Sha256, Digest};
 use tracing::info;
 
@@ -22,7 +22,7 @@ impl SecureStorage {
 
     /// Store identity key encrypted with password
     pub async fn store_identity(&self, identity: &IdentityKey, password: &str) -> Result<()> {
-        let encrypted = securecomm_shared::secure_store(identity, password)
+        let encrypted = mobium_shared::secure_store(identity, password)
             .map_err(|e| anyhow::anyhow!("Failed to encrypt identity: {}", e))?;
 
         tokio::fs::create_dir_all(&self.data_dir).await?;
@@ -39,7 +39,7 @@ impl SecureStorage {
         let encrypted = tokio::fs::read(&path).await
             .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", path.display(), e))?;
 
-        let identity = securecomm_shared::secure_load(&encrypted, password)
+        let identity = mobium_shared::secure_load(&encrypted, password)
             .map_err(|e| anyhow::anyhow!("Failed to decrypt identity: {}", e))?;
 
         info!("Identity loaded and decrypted successfully");

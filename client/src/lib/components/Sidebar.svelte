@@ -104,7 +104,7 @@
 	<!-- Header -->
 	<div class="border-b border-surface-light p-4">
 		<div class="mb-4 flex items-center justify-between">
-			<h1 class="text-xl font-bold text-text">Discable</h1>
+			<h1 class="text-xl font-bold text-text">Mobium</h1>
 			<div class="flex items-center gap-2">
 				{#if $connectionStore.connected}
 					<div class="h-2 w-2 rounded-full bg-success" title="Connected"></div>

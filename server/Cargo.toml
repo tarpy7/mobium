@@ -1,12 +1,12 @@
 [package]
-name = "securecomm-server"
+name = "mobium-server"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "securecomm-server"
+name = "mobium-server"
 path = "src/main.rs"
 
 [dependencies]
@@ -50,7 +50,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 
 # Shared crypto
-securecomm-shared = { path = "../shared" }
+mobium-shared = { path = "../shared" }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 
 # Configuration

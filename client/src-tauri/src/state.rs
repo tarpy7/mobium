@@ -1,9 +1,9 @@
 //! Application state
 
-use securecomm_shared::ratchet::DoubleRatchet;
-use securecomm_shared::sender_keys::{GroupSession, SenderKeyDistribution};
-use securecomm_shared::x3dh::PrivatePreKeys;
-use securecomm_shared::IdentityKey;
+use mobium_shared::ratchet::DoubleRatchet;
+use mobium_shared::sender_keys::{GroupSession, SenderKeyDistribution};
+use mobium_shared::x3dh::PrivatePreKeys;
+use mobium_shared::IdentityKey;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

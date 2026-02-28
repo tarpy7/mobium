@@ -1,8 +1,8 @@
-# SecureComm Architecture
+# Mobium Architecture
 
 ## Overview
 
-SecureComm is a mathematically secure, self-hosted Discord alternative with zero-knowledge architecture. The server cannot decrypt any communications, and no account recovery is possible without the user's BIP39 mnemonic phrase.
+Mobium is a mathematically secure, self-hosted Discord alternative with zero-knowledge architecture. The server cannot decrypt any communications, and no account recovery is possible without the user's BIP39 mnemonic phrase.
 
 ## System Architecture
 

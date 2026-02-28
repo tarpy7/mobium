@@ -26,7 +26,7 @@
 3. **Boot and configure**
    ```bash
    sudo raspi-config
-   # Set hostname: securecomm
+   # Set hostname: mobium
    # Enable auto-login (optional)
    ```
 
@@ -42,8 +42,8 @@
 
 2. **Clone repository**
    ```bash
-   git clone https://github.com/securecomm/securecomm.git
-   cd securecomm
+   git clone https://github.com/mobium/mobium.git
+   cd mobium
    ```
 
 3. **Generate certificates**
@@ -53,7 +53,7 @@
      -keyout certs/key.pem \
      -out certs/cert.pem \
      -days 365 -nodes \
-     -subj "/CN=securecomm.local"
+     -subj "/CN=mobium.local"
    ```
 
 4. **Configure environment**
@@ -114,9 +114,9 @@ services:
 4. **Deploy**
    ```bash
    # Copy project files
-   scp -r securecomm/ user@server:/opt/
+   scp -r mobium/ user@server:/opt/
    ssh user@server
-   cd /opt/securecomm
+   cd /opt/mobium
    
    # Use Let's Encrypt instead of self-signed
    # Install certbot and generate real certs
@@ -130,20 +130,20 @@ services:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: securecomm-server
+  name: mobium-server
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: securecomm
+      app: mobium
   template:
     metadata:
       labels:
-        app: securecomm
+        app: mobium
     spec:
       containers:
       - name: server
-        image: securecomm/server:latest
+        image: mobium/server:latest
         ports:
         - containerPort: 8443
         env:
@@ -160,10 +160,10 @@ spec:
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: securecomm-data
+          claimName: mobium-data
       - name: certs
         secret:
-          secretName: securecomm-tls
+          secretName: mobium-tls
 ```
 
 ## Reverse Proxy
@@ -171,7 +171,7 @@ spec:
 ### Caddy
 
 ```Caddyfile
-securecomm.example.com {
+mobium.example.com {
     reverse_proxy localhost:8443
     tls {
         protocols tls1.3
@@ -184,7 +184,7 @@ securecomm.example.com {
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name securecomm.example.com;
+    server_name mobium.example.com;
     
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
@@ -206,20 +206,20 @@ server {
 ```bash
 # Automated backup script
 #!/bin/bash
-BACKUP_DIR=/backups/securecomm
+BACKUP_DIR=/backups/mobium
 DATE=$(date +%Y%m%d_%H%M%S)
 
 # Stop server
 docker-compose stop server
 
 # Backup database
-cp data/securecomm.db $BACKUP_DIR/securecomm_$DATE.db
+cp data/mobium.db $BACKUP_DIR/mobium_$DATE.db
 
 # Restart server
 docker-compose start server
 
 # Keep only last 7 days
-find $BACKUP_DIR -name "securecomm_*.db" -mtime +7 -delete
+find $BACKUP_DIR -name "mobium_*.db" -mtime +7 -delete
 ```
 
 ### Identity Backup
@@ -238,11 +238,11 @@ Server admin should backup:
 ```bash
 # Systemd service for health monitoring
 [Unit]
-Description=SecureComm Health Check
+Description=Mobium Health Check
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/curl -f -k https://localhost:8443/health || /usr/bin/systemctl restart securecomm
+ExecStart=/usr/bin/curl -f -k https://localhost:8443/health || /usr/bin/systemctl restart mobium
 ```
 
 ### Prometheus Metrics (Future)

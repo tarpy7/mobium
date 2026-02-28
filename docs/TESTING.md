@@ -13,18 +13,18 @@ cargo test --workspace
 cargo test --workspace -- --nocapture
 
 # Run specific package
-cargo test -p securecomm-shared
-cargo test -p securecomm-server
+cargo test -p mobium-shared
+cargo test -p mobium-server
 ```
 
 ## Running Specific Tests
 
 ```bash
 # By test file
-cargo test --package securecomm-shared --test crypto_tests
-cargo test --package securecomm-shared --test protocol_tests
-cargo test --package securecomm-shared --test edge_case_tests
-cargo test --package securecomm-server --test database_tests
+cargo test --package mobium-shared --test crypto_tests
+cargo test --package mobium-shared --test protocol_tests
+cargo test --package mobium-shared --test edge_case_tests
+cargo test --package mobium-server --test database_tests
 
 # By test name pattern
 cargo test sender_keys

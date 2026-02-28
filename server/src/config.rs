@@ -53,7 +53,7 @@ impl ServerConfig {
                 .parse()
                 .context("Invalid SC_PORT")?,
             database_url: env::var("SC_DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite://./data/securecomm.db".to_string()),
+                .unwrap_or_else(|_| "sqlite://./data/mobium.db".to_string()),
             tls_cert_path: env::var("SC_TLS_CERT").ok(),
             tls_key_path: env::var("SC_TLS_KEY").ok(),
             mtls_ca_path: env::var("SC_MTLS_CA").ok(),

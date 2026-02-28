@@ -2,7 +2,7 @@
 //!
 //! Tests error propagation, invalid inputs, and boundary conditions.
 
-use securecomm_shared::CryptoError;
+use mobium_shared::CryptoError;
 
 // ============================================================================
 // Error Type Tests
@@ -45,7 +45,7 @@ fn test_error_debug() {
 
 #[test]
 fn test_empty_inputs() {
-    use securecomm_shared::*;
+    use mobium_shared::*;
     
     // Empty message padding
     let padded = padding::pad_to_bucket(b"").unwrap();
@@ -55,7 +55,7 @@ fn test_empty_inputs() {
 
 #[test]
 fn test_single_byte_inputs() {
-    use securecomm_shared::*;
+    use mobium_shared::*;
     
     // Single byte message
     let data = vec![0x42];
@@ -66,7 +66,7 @@ fn test_single_byte_inputs() {
 
 #[test]
 fn test_maximum_size_inputs() {
-    use securecomm_shared::*;
+    use mobium_shared::*;
     
     // Maximum valid size
     let max_size = padding::MAX_PLAINTEXT_SIZE;
@@ -82,7 +82,7 @@ fn test_maximum_size_inputs() {
 
 #[test]
 fn test_boundary_values() {
-    use securecomm_shared::*;
+    use mobium_shared::*;
     
     // Test at bucket boundaries
     // Total overhead = HEADER_SIZE (8) + GCM_TAG_SIZE (16) = 24
@@ -104,7 +104,7 @@ fn test_boundary_values() {
 
 #[test]
 fn test_invalid_mnemonic_formats() {
-    use securecomm_shared::recovery;
+    use mobium_shared::recovery;
     
     // Empty mnemonic
     assert!(recovery::validate_mnemonic("").is_err());
@@ -128,7 +128,7 @@ fn test_invalid_mnemonic_formats() {
 
 #[test]
 fn test_shamir_edge_cases() {
-    use securecomm_shared::sss;
+    use mobium_shared::sss;
     
     // Empty secret
     let shares = sss::create_shards(b"", 5, 3);
@@ -144,7 +144,7 @@ fn test_shamir_edge_cases() {
 
 #[test]
 fn test_shamir_with_duplicate_shares() {
-    use securecomm_shared::sss;
+    use mobium_shared::sss;
     
     let secret = b"test secret";
     let shares = sss::create_shards(secret, 5, 3).unwrap();
@@ -169,7 +169,7 @@ fn test_shamir_with_duplicate_shares() {
 
 #[test]
 fn test_no_panic_on_valid_inputs() {
-    use securecomm_shared::*;
+    use mobium_shared::*;
     
     // These should not panic
     let _ = generate_identity();
@@ -180,8 +180,8 @@ fn test_no_panic_on_valid_inputs() {
 
 #[test]
 fn test_graceful_error_handling() {
-    use securecomm_shared::*;
-    use securecomm_shared::padding::MAX_PLAINTEXT_SIZE;
+    use mobium_shared::*;
+    use mobium_shared::padding::MAX_PLAINTEXT_SIZE;
     
     // Invalid bucket size should return error, not panic
     let result = padding::unpad_from_bucket(&[0; 100]);
@@ -204,7 +204,7 @@ fn test_graceful_error_handling() {
 #[test]
 fn test_concurrent_key_generation() {
     use std::thread;
-    use securecomm_shared::generate_identity;
+    use mobium_shared::generate_identity;
     
     let mut handles = vec![];
     
@@ -228,7 +228,7 @@ fn test_concurrent_key_generation() {
 #[test]
 fn test_concurrent_padding() {
     use std::thread;
-    use securecomm_shared::padding;
+    use mobium_shared::padding;
     
     let data = b"concurrent test data";
     let mut handles = vec![];
@@ -254,7 +254,7 @@ fn test_concurrent_padding() {
 
 #[test]
 fn test_sensitive_data_zeroization() {
-    use securecomm_shared::*;
+    use mobium_shared::*;
     use zeroize::Zeroize;
     
     // Test that sensitive data is zeroized
@@ -280,7 +280,7 @@ fn test_no_sensitive_data_in_errors() {
 
 #[test]
 fn test_randomized_padding() {
-    use securecomm_shared::padding;
+    use mobium_shared::padding;
     use rand::Rng;
     
     let mut rng = rand::thread_rng();
@@ -300,7 +300,7 @@ fn test_randomized_padding() {
 
 #[test]
 fn test_randomized_shamir() {
-    use securecomm_shared::sss;
+    use mobium_shared::sss;
     use rand::Rng;
     
     let mut rng = rand::thread_rng();

@@ -1,10 +1,10 @@
 [package]
-name = "securecomm-client"
+name = "mobium-client"
 version = "0.1.0"
-description = "SecureComm - Zero-Knowledge Discord Alternative"
-authors = ["SecureComm Contributors"]
+description = "Mobium - Zero-Knowledge Discord Alternative"
+authors = ["Mobium Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/securecomm/securecomm"
+repository = "https://github.com/mobium/mobium"
 edition = "2021"
 rust-version = "1.70"
 
@@ -24,7 +24,7 @@ anyhow = "1"
 dirs = "5"
 
 # Crypto
-securecomm-shared = { path = "../../shared" }
+mobium-shared = { path = "../../shared" }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 x25519-dalek = { version = "2", features = ["static_secrets", "reusable_secrets"] }
 
@@ -52,5 +52,5 @@ sha2 = "0.10"
 rand = "0.8"
 
 [[bin]]
-name = "securecomm-client"
+name = "mobium-client"
 path = "src/main.rs"

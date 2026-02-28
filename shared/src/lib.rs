@@ -1,6 +1,6 @@
-//! SecureComm Cryptographic Primitives
+//! Mobium Cryptographic Primitives
 //!
-//! This crate provides the cryptographic foundation for SecureComm,
+//! This crate provides the cryptographic foundation for Mobium,
 //! implementing Signal Protocol primitives, X3DH handshake, and Double Ratchet.
 
 #![warn(missing_docs)]

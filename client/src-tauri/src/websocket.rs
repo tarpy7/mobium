@@ -11,9 +11,9 @@ use crate::state::AppState;
 use crate::db;
 use std::sync::Arc;
 use serde::Serialize;
-use securecomm_shared::ratchet::{DoubleRatchet, MessageHeader};
-use securecomm_shared::sender_keys::SenderKeyDistribution;
-use securecomm_shared::x3dh;
+use mobium_shared::ratchet::{DoubleRatchet, MessageHeader};
+use mobium_shared::sender_keys::SenderKeyDistribution;
+use mobium_shared::x3dh;
 use x25519_dalek;
 
 
@@ -171,10 +171,10 @@ pub async fn connect(server_url: String, app_handle: AppHandle, state: State<'_,
         }
     };
     
-    // Sign "Discable-auth-v1" || nonce
+    // Sign "Mobium-auth-v1" || nonce
     let pubkey = identity.public_signing_key().as_bytes().to_vec();
     let x25519_pub = identity.public_encryption_key().as_bytes().to_vec();
-    let mut challenge_data = b"Discable-auth-v1".to_vec();
+    let mut challenge_data = b"Mobium-auth-v1".to_vec();
     challenge_data.extend_from_slice(&auth_nonce);
     let signature = identity.sign(&challenge_data).to_bytes().to_vec();
     
@@ -941,7 +941,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                         }
                     };
                     let sender_x25519 = x25519_dalek::PublicKey::from(sender_x25519);
-                    match securecomm_shared::decrypt_from_sender(
+                    match mobium_shared::decrypt_from_sender(
                         &identity.encryption,
                         &sender_x25519,
                         &encrypted_dist,
@@ -983,7 +983,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                                     let my_pubkey = identity.public_signing_key().as_bytes().to_vec();
                                     drop(identity_guard2);
                                     let channel_id_bytes2 = hex::decode(&channel_hex).unwrap_or_default();
-                                    let (new_session, my_dist) = securecomm_shared::sender_keys::GroupSession::new(&channel_id_bytes2, &my_pubkey);
+                                    let (new_session, my_dist) = mobium_shared::sender_keys::GroupSession::new(&channel_id_bytes2, &my_pubkey);
                                     
                                     // Persist our chain to DB
                                     let (chain_key, key_id, iteration) = new_session.my_chain_state();
@@ -1172,7 +1172,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                                     }
                                 };
                                 
-                                let encrypted = match securecomm_shared::encrypt_for_recipient(
+                                let encrypted = match mobium_shared::encrypt_for_recipient(
                                     encryption_key,
                                     &recipient_x25519,
                                     &dist_bytes,
@@ -1303,7 +1303,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                                 }
                             };
                             
-                            let encrypted = match securecomm_shared::encrypt_for_recipient(
+                            let encrypted = match mobium_shared::encrypt_for_recipient(
                                 encryption_key,
                                 &recipient_x25519,
                                 &dist_bytes,
@@ -1361,7 +1361,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                         drop(identity_guard);
                         
                         let channel_id_bytes = channel_id.clone();
-                        let (new_session, my_dist) = securecomm_shared::sender_keys::GroupSession::new(&channel_id_bytes, &my_pubkey);
+                        let (new_session, my_dist) = mobium_shared::sender_keys::GroupSession::new(&channel_id_bytes, &my_pubkey);
                         
                         // Persist our chain to DB
                         let (chain_key, key_id, iteration) = new_session.my_chain_state();
@@ -1413,7 +1413,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                             }
                         };
                         
-                        let encrypted = match securecomm_shared::encrypt_for_recipient(
+                        let encrypted = match mobium_shared::encrypt_for_recipient(
                             &encryption_key,
                             &recipient_x25519,
                             &dist_bytes,
@@ -1497,7 +1497,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                     let my_pubkey_hex = hex::encode(&my_pubkey);
                     drop(identity_guard);
                     
-                    let (new_session, new_dist) = securecomm_shared::sender_keys::GroupSession::new(&channel_id, &my_pubkey);
+                    let (new_session, new_dist) = mobium_shared::sender_keys::GroupSession::new(&channel_id, &my_pubkey);
                     
                     // Persist new chain
                     let (chain_key, key_id, iteration) = new_session.my_chain_state();
@@ -1545,7 +1545,7 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                                         }
                                         _ => continue,
                                     };
-                                    let encrypted = match securecomm_shared::encrypt_for_recipient(
+                                    let encrypted = match mobium_shared::encrypt_for_recipient(
                                         encryption_key, &recipient_x25519, &dist_bytes, &channel_id,
                                     ) {
                                         Ok(enc) => enc,

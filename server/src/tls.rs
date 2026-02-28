@@ -93,7 +93,7 @@ pub async fn generate_self_signed_cert(cert_path: &str, key_path: &str) -> Resul
     info!("Generating self-signed certificate...");
     
     let CertifiedKey { cert, key_pair } = generate_simple_self_signed(
-        vec!["localhost".to_string(), "securecomm.local".to_string()]
+        vec!["localhost".to_string(), "mobium.local".to_string()]
     ).context("Failed to generate self-signed certificate")?;
     
     // Write certificate

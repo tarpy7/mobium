@@ -445,7 +445,7 @@ async fn handle_auth(
         .iter().map(|v| v.as_u64().map(|n| n as u8)).collect::<Option<Vec<u8>>>()
         .ok_or_else(|| anyhow::anyhow!("Invalid signature format"))?;
 
-    let mut challenge_data = b"Discable-auth-v1".to_vec();
+    let mut challenge_data = b"Mobium-auth-v1".to_vec();
     challenge_data.extend_from_slice(&conn.auth_challenge);
     if !verify_challenge(&pubkey, &signature, &challenge_data) {
         anyhow::bail!("Invalid authentication signature");

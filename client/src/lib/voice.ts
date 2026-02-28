@@ -4,7 +4,7 @@
  * Handles WebRTC peer-to-peer voice calls with end-to-end encryption.
  *
  * Architecture:
- * - Signaling goes through the existing Discable server (voice_signal messages)
+ * - Signaling goes through the existing Mobium server (voice_signal messages)
  * - Media (audio) goes peer-to-peer via WebRTC with DTLS-SRTP encryption
  * - The server never sees or relays audio data, only opaque signaling blobs
  * - ICE candidates are gathered via STUN to enable NAT traversal

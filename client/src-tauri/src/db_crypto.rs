@@ -26,7 +26,7 @@ const MIN_CT_LEN: usize = NONCE_LEN + 16;
 /// the same password always produces the same DB key, while remaining
 /// computationally expensive to brute-force.
 ///
-/// The salt is `HMAC-SHA256("Discable-db-salt-v2", password)` — this is NOT
+/// The salt is `HMAC-SHA256("Mobium-db-salt-v2", password)` — this is NOT
 /// used for security of the salt itself (the salt is deterministic by design),
 /// but to domain-separate the DB key from the identity encryption key which
 /// uses Argon2id with a random salt.
@@ -41,9 +41,9 @@ pub fn derive_db_key(password: &str) -> [u8; 32] {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    // Deterministic salt: HMAC-SHA256("Discable-db-salt-v2", password)
+    // Deterministic salt: HMAC-SHA256("Mobium-db-salt-v2", password)
     // This ensures the same password always yields the same DB key.
-    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(b"Discable-db-salt-v2")
+    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(b"Mobium-db-salt-v2")
         .expect("HMAC accepts any key length");
     mac.update(password.as_bytes());
     let salt = mac.finalize().into_bytes();

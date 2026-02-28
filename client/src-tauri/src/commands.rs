@@ -6,15 +6,15 @@ use crate::state::AppState;
 use crate::crypto::SecureStorage;
 use crate::db;
 use crate::db_crypto;
-use securecomm_shared::ratchet::DoubleRatchet;
-use securecomm_shared::sender_keys::{GroupSession, SenderKeyDistribution};
-use securecomm_shared::x3dh;
+use mobium_shared::ratchet::DoubleRatchet;
+use mobium_shared::sender_keys::{GroupSession, SenderKeyDistribution};
+use mobium_shared::x3dh;
 use x25519_dalek;
 
 
 /// Get a SecureStorage pointing at the active profile directory.
 async fn storage_for_profile(state: &AppState) -> anyhow::Result<SecureStorage> {
-    let dir = crate::discable_profile_dir(state).await?;
+    let dir = crate::mobium_profile_dir(state).await?;
     Ok(SecureStorage::with_dir(dir))
 }
 
@@ -24,7 +24,7 @@ async fn storage_for_profile(state: &AppState) -> anyhow::Result<SecureStorage> 
 /// an identity.enc file, plus any empty subdirectories created by create_profile).
 #[tauri::command]
 pub async fn list_profiles() -> Result<Vec<String>, String> {
-    let base = crate::discable_data_dir().map_err(|e| e.to_string())?;
+    let base = crate::mobium_data_dir().map_err(|e| e.to_string())?;
     
     let mut profiles = Vec::new();
     
@@ -54,7 +54,7 @@ pub async fn list_profiles() -> Result<Vec<String>, String> {
 /// this profile's data directory.
 #[tauri::command]
 pub async fn select_profile(profile_name: String, state: State<'_, AppState>) -> Result<(), String> {
-    let base = crate::discable_data_dir().map_err(|e| e.to_string())?;
+    let base = crate::mobium_data_dir().map_err(|e| e.to_string())?;
     
     // "Default" is the legacy profile in the base directory
     if profile_name == "Default" {
@@ -84,7 +84,7 @@ pub async fn create_profile(profile_name: String, state: State<'_, AppState>) ->
         return Err("Profile name may only contain letters, numbers, spaces, dashes, and underscores".to_string());
     }
     
-    let base = crate::discable_data_dir().map_err(|e| e.to_string())?;
+    let base = crate::mobium_data_dir().map_err(|e| e.to_string())?;
     let profile_dir = base.join(&profile_name);
     
     if profile_dir.exists() {
@@ -123,14 +123,14 @@ pub async fn generate_identity(password: String, state: State<'_, AppState>) -> 
 
 async fn _generate_identity(password: String, state: State<'_, AppState>) -> anyhow::Result<String> {
     // Generate identity key
-    let identity = securecomm_shared::generate_identity();
+    let identity = mobium_shared::generate_identity();
     
     // Generate mnemonic
-    let mnemonic = securecomm_shared::recovery::generate_mnemonic()
+    let mnemonic = mobium_shared::recovery::generate_mnemonic()
         .map_err(|e| anyhow::anyhow!("Failed to generate mnemonic: {}", e))?;
     
     // Derive seed from mnemonic
-    let _seed = securecomm_shared::recovery::mnemonic_to_seed(&mnemonic, None)
+    let _seed = mobium_shared::recovery::mnemonic_to_seed(&mnemonic, None)
         .map_err(|e| anyhow::anyhow!("Failed to derive seed: {}", e))?;
     
     // Store identity securely
@@ -152,7 +152,7 @@ async fn _generate_identity(password: String, state: State<'_, AppState>) -> any
     drop(key_guard);
     
     // Initialize database
-    let profile_dir = crate::discable_profile_dir(&state).await?;
+    let profile_dir = crate::mobium_profile_dir(&state).await?;
     let db_pool = db::init(&profile_dir).await.map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut db_guard = state.db.write().await;
     *db_guard = Some(db_pool);
@@ -201,19 +201,19 @@ async fn _import_mnemonic(
     state: State<'_, AppState>,
 ) -> anyhow::Result<()> {
     // Validate mnemonic
-    securecomm_shared::recovery::validate_mnemonic(&mnemonic)
+    mobium_shared::recovery::validate_mnemonic(&mnemonic)
         .map_err(|e| anyhow::anyhow!("Invalid mnemonic: {}", e))?;
     
     // Derive seed from mnemonic
-    let bip39_seed = securecomm_shared::recovery::mnemonic_to_seed(&mnemonic, None)
+    let bip39_seed = mobium_shared::recovery::mnemonic_to_seed(&mnemonic, None)
         .map_err(|e| anyhow::anyhow!("Failed to derive seed: {}", e))?;
     
     // Derive 32-byte identity seed from the 64-byte BIP39 seed
-    let identity_seed = securecomm_shared::recovery::derive_identity_seed(&bip39_seed)
+    let identity_seed = mobium_shared::recovery::derive_identity_seed(&bip39_seed)
         .map_err(|e| anyhow::anyhow!("Failed to derive identity seed: {}", e))?;
     
     // Generate identity deterministically from seed
-    let identity = securecomm_shared::identity_from_seed(&identity_seed);
+    let identity = mobium_shared::identity_from_seed(&identity_seed);
     
     // Store identity
     let storage = storage_for_profile(&state).await?;
@@ -232,7 +232,7 @@ async fn _import_mnemonic(
     drop(key_guard);
     
     // Initialize database
-    let profile_dir = crate::discable_profile_dir(&state).await?;
+    let profile_dir = crate::mobium_profile_dir(&state).await?;
     let db_pool = db::init(&profile_dir).await.map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut db_guard = state.db.write().await;
     *db_guard = Some(db_pool);
@@ -294,7 +294,7 @@ async fn _unlock_identity(password: String, state: State<'_, AppState>) -> anyho
     drop(key_guard);
     
     // Initialize database
-    let profile_dir = crate::discable_profile_dir(&state).await?;
+    let profile_dir = crate::mobium_profile_dir(&state).await?;
     let db_pool = db::init(&profile_dir).await.map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut db_guard = state.db.write().await;
     *db_guard = Some(db_pool);
@@ -665,7 +665,7 @@ pub async fn reset_identity(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 async fn _reset_identity(state: State<'_, AppState>) -> anyhow::Result<()> {
-    let data_dir = crate::discable_profile_dir(&state).await?;
+    let data_dir = crate::mobium_profile_dir(&state).await?;
     
     // Close DB if open
     {
@@ -856,7 +856,7 @@ async fn send_encrypted_distribution(
 
         // Encrypt distribution for this recipient
         let context = channel_id_bytes.as_slice();
-        let encrypted = securecomm_shared::encrypt_for_recipient(
+        let encrypted = mobium_shared::encrypt_for_recipient(
             encryption_key,
             &recipient_x25519,
             &dist_bytes,
@@ -1059,7 +1059,7 @@ pub async fn send_channel_message(
     
     // The encrypted_payload already includes padding (done by GroupSession::encrypt),
     // so bucket_index is derived from the ciphertext size
-    let bucket_index = match securecomm_shared::get_bucket_index(content.len()) {
+    let bucket_index = match mobium_shared::get_bucket_index(content.len()) {
         Ok(idx) => idx as i64,
         Err(e) => {
             tracing::error!("send_channel_message: message too large: {}", e);

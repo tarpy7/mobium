@@ -1,4 +1,4 @@
-# Discable — Remaining Action Items
+# Mobium — Remaining Action Items
 
 ## Completed Work Reference
 
@@ -16,7 +16,7 @@ All of the following are fully implemented and tested:
 - **DM Ratchet Bug Fix**: V3 migration clears corrupt sessions, `load()` validates DH key consistency
 - **Two-Tier Server Design**: Architecture document at `docs/DESIGN_TWO_TIER.md`
 
-**Build status**: `cargo check --workspace` 0 errors, `cargo test -p securecomm-shared` 90/90 pass, `vite build` passes.
+**Build status**: `cargo check --workspace` 0 errors, `cargo test -p mobium-shared` 90/90 pass, `vite build` passes.
 
 ---
 
@@ -127,12 +127,12 @@ All of the following are fully implemented and tested:
 ### Recommended Deployment
 
 **Self-hosted (community)**:
-1. Install coturn alongside the Discable server
+1. Install coturn alongside the Mobium server
 2. Configure `use-auth-secret` with a shared secret
-3. Set `SC_ICE_TURN_URL` and `SC_ICE_TURN_SECRET` in Discable's env
-4. Discable server generates time-limited credentials per user session
+3. Set `SC_ICE_TURN_URL` and `SC_ICE_TURN_SECRET` in Mobium's env
+4. Mobium server generates time-limited credentials per user session
 
 **Managed**:
 1. Deploy coturn cluster (one per geographic region for latency)
-2. Discable managed server generates HMAC credentials internally
+2. Mobium managed server generates HMAC credentials internally
 3. Client receives credentials after auth, refreshes on TTL expiry

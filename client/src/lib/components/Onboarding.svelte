@@ -75,12 +75,12 @@
 		{#if step === 'welcome'}
 			<div class="text-center">
 				<div class="mb-6">
-					<div class="mb-2 text-4xl font-bold text-primary">Discable</div>
+					<div class="mb-2 text-4xl font-bold text-primary">Mobium</div>
 					<div class="text-text-muted">Zero-knowledge encrypted messaging</div>
 				</div>
 				
 				<p class="mb-8 text-text-muted">
-					Welcome to SecureComm. Your messages are end-to-end encrypted and 
+					Welcome to Mobium. Your messages are end-to-end encrypted and 
 					can only be read by you and your contacts.
 				</p>
 

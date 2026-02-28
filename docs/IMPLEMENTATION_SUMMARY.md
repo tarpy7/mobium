@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented mathematically secure size masking and channel history features for the SecureComm messaging platform.
+Successfully implemented mathematically secure size masking and channel history features for the Mobium messaging platform.
 
 ## 1. Size Masking Module (`shared/src/padding.rs`)
 

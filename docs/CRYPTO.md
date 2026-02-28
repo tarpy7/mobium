@@ -1,10 +1,10 @@
 # Cryptographic Protocols
 
-This document details the cryptographic protocols used in SecureComm.
+This document details the cryptographic protocols used in Mobium.
 
 ## Overview
 
-SecureComm implements the Signal Protocol with the following primitives:
+Mobium implements the Signal Protocol with the following primitives:
 
 - **X3DH** (Extended Triple Diffie-Hellman): Initial key agreement
 - **Double Ratchet**: Forward secrecy and future secrecy
@@ -149,7 +149,7 @@ Triggered when receiving a message with a new DH public key:
 
 **Root Key KDF**:
 ```
-KDF_RK(rk, dh_out) = HKDF-SHA256(dh_out, rk, "SecureComm-v1-RootKey")
+KDF_RK(rk, dh_out) = HKDF-SHA256(dh_out, rk, "Mobium-v1-RootKey")
 ```
 
 **Chain Key KDF**:
@@ -253,7 +253,7 @@ Sensitive data is cleared from memory:
 
 ## Sender Keys (Group / Channel Encryption)
 
-For channel messages, SecureComm uses **Signal-style Sender Keys** instead
+For channel messages, Mobium uses **Signal-style Sender Keys** instead
 of pairwise Double Ratchets. Each group member maintains their own
 symmetric ratchet chain. When sending, you advance YOUR chain and encrypt;
 all other members hold a copy of your chain key so they can derive the same
@@ -342,7 +342,7 @@ NOT advance the chain ratchet. This is critical because:
 A stable voice key is derived ONCE per chain generation:
 
 ```
-voice_key = HMAC-SHA256(initial_seed, "Discable-voice-v1" || key_id_BE)
+voice_key = HMAC-SHA256(initial_seed, "Mobium-voice-v1" || key_id_BE)
 ```
 
 This key is included in the `SenderKeyDistribution` so peers receive it

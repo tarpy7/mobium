@@ -14,7 +14,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Identity key pair containing both signing and encryption keys
 ///
-/// This is the root of trust for a user's identity in SecureComm.
+/// This is the root of trust for a user's identity in Mobium.
 /// The signing key (Ed25519) is used for authentication and signatures.
 /// The encryption key (X25519) is used for X3DH key agreement.
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -72,8 +72,8 @@ pub fn generate_identity() -> IdentityKey {
 /// The same seed will always produce the same key pair.
 ///
 /// Uses HKDF-SHA256 to derive two independent 32-byte keys from the seed:
-/// - Signing key: HKDF(seed, info="Discable-ed25519-signing-v1")
-/// - Encryption key: HKDF(seed, info="Discable-x25519-encryption-v1")
+/// - Signing key: HKDF(seed, info="Mobium-ed25519-signing-v1")
+/// - Encryption key: HKDF(seed, info="Mobium-x25519-encryption-v1")
 ///
 /// This prevents cross-protocol key reuse between Ed25519 and X25519.
 pub fn identity_from_seed(seed: &[u8; 32]) -> IdentityKey {
@@ -86,12 +86,12 @@ pub fn identity_from_seed(seed: &[u8; 32]) -> IdentityKey {
     // is equivalent to a single HKDF-Expand step.
     let mut signing_mac =
         <HmacSha256 as Mac>::new_from_slice(seed).expect("HMAC accepts any key length");
-    signing_mac.update(b"Discable-ed25519-signing-v1");
+    signing_mac.update(b"Mobium-ed25519-signing-v1");
     let signing_bytes: [u8; 32] = signing_mac.finalize().into_bytes().into();
 
     let mut encryption_mac =
         <HmacSha256 as Mac>::new_from_slice(seed).expect("HMAC accepts any key length");
-    encryption_mac.update(b"Discable-x25519-encryption-v1");
+    encryption_mac.update(b"Mobium-x25519-encryption-v1");
     let encryption_bytes: [u8; 32] = encryption_mac.finalize().into_bytes().into();
 
     let signing = SigningKey::from_bytes(&signing_bytes);
@@ -251,10 +251,10 @@ pub fn encrypt_for_recipient(
 
     let shared_secret = our_secret.diffie_hellman(their_public);
 
-    // Derive AES key: HMAC-SHA256(shared_secret, "Discable-dist-enc-v1" || context)
+    // Derive AES key: HMAC-SHA256(shared_secret, "Mobium-dist-enc-v1" || context)
     let mut mac = <HmacSha256 as Mac>::new_from_slice(shared_secret.as_bytes())
         .expect("HMAC accepts any key length");
-    mac.update(b"Discable-dist-enc-v1");
+    mac.update(b"Mobium-dist-enc-v1");
     mac.update(context);
     let aes_key_bytes: [u8; 32] = mac.finalize().into_bytes().into();
 
@@ -298,7 +298,7 @@ pub fn decrypt_from_sender(
 
     let mut mac = <HmacSha256 as Mac>::new_from_slice(shared_secret.as_bytes())
         .expect("HMAC accepts any key length");
-    mac.update(b"Discable-dist-enc-v1");
+    mac.update(b"Mobium-dist-enc-v1");
     mac.update(context);
     let aes_key_bytes: [u8; 32] = mac.finalize().into_bytes().into();
 
