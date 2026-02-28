@@ -25,7 +25,7 @@ pub async fn init(database_url: &str) -> Result<Pool<Sqlite>> {
 }
 
 /// Run database migrations
-async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
+pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     info!("Running database migrations");
 
     sqlx::query(
@@ -562,6 +562,18 @@ pub async fn get_channel_history(
     .await?;
 
     Ok(rows)
+}
+
+/// Check if a channel exists
+pub async fn channel_exists(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+) -> Result<bool> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channels WHERE id = ?1")
+        .bind(channel_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(count > 0)
 }
 
 /// Create a new channel

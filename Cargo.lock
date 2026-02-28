@@ -2690,8 +2690,10 @@ name = "mobium-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "axum-server",
+ "base64 0.22.1",
  "chrono",
  "config",
  "dashmap",
@@ -2700,6 +2702,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
+ "hmac",
  "mobium-shared",
  "once_cell",
  "rand 0.8.5",
@@ -2710,6 +2713,7 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
+ "sha1",
  "sqlx",
  "subtle",
  "thiserror 1.0.69",

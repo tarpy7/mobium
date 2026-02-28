@@ -13,6 +13,7 @@ mod config;
 mod websocket;
 mod routing;
 mod database;
+mod db;
 mod tls;
 mod auth;
 

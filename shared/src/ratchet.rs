@@ -565,9 +565,6 @@ impl DoubleRatchet {
         })
     }
 
-    /// Serialise to bytes with an externally-provided DH private key.
-    ///
-
 }
 
 // ─────────── FixedRng for deterministic secret construction ────────

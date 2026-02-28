@@ -949,41 +949,39 @@ async fn handle_set_channel_access(
     msg: &serde_json::Value,
     conn: &Connection,
     state: &Arc<ServerState>,
-) -> Result<(), String> {
-    let user = require_auth(conn).map_err(|e| e.to_string())?;
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
     let channel_id = extract_bytes(msg.get("channel_id"))
-        .ok_or_else(|| "Missing channel_id".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
     let access_mode = msg.get("access_mode")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "Missing access_mode".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("Missing access_mode"))?;
 
     if access_mode != "public" && access_mode != "private" {
-        return Err("access_mode must be 'public' or 'private'".to_string());
+        anyhow::bail!("access_mode must be 'public' or 'private'");
     }
 
     // Only the channel creator can change access mode
-    let access = database::get_channel_access(&state.db_pool, &channel_id)
-        .await.map_err(|e| e.to_string())?;
+    let access = database::get_channel_access(&state.db_pool, &channel_id).await?;
     match access {
         Some((_mode, Some(ref creator))) if creator == user => {}
         _ => {
             let err = rmp_serde::to_vec_named(&serde_json::json!({
                 "type": "error", "message": "Only the channel creator can change access mode",
-            })).map_err(|e| e.to_string())?;
-            conn.tx.send(err).await.map_err(|e| e.to_string())?;
+            }))?;
+            conn.tx.send(err).await?;
             return Ok(());
         }
     }
 
-    database::set_channel_access_mode(&state.db_pool, &channel_id, access_mode)
-        .await.map_err(|e| e.to_string())?;
+    database::set_channel_access_mode(&state.db_pool, &channel_id, access_mode).await?;
 
     let response = rmp_serde::to_vec_named(&serde_json::json!({
         "type": "channel_access_updated",
         "channel_id": channel_id,
         "access_mode": access_mode,
-    })).map_err(|e| e.to_string())?;
-    conn.tx.send(response).await.map_err(|e| e.to_string())?;
+    }))?;
+    conn.tx.send(response).await?;
 
     info!("Channel {} access mode set to '{}' by {}",
         hex::encode(&channel_id[..8.min(channel_id.len())]),
@@ -996,21 +994,20 @@ async fn handle_create_invite(
     msg: &serde_json::Value,
     conn: &Connection,
     state: &Arc<ServerState>,
-) -> Result<(), String> {
-    let user = require_auth(conn).map_err(|e| e.to_string())?;
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
     let channel_id = extract_bytes(msg.get("channel_id"))
-        .ok_or_else(|| "Missing channel_id".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
     let max_uses = msg.get("max_uses").and_then(|v| v.as_i64()).unwrap_or(1);
     let ttl_seconds = msg.get("ttl_seconds").and_then(|v| v.as_i64());
 
-    // Only channel creator or members can create invites
-    let is_member = database::is_channel_member(&state.db_pool, &channel_id, user)
-        .await.map_err(|e| e.to_string())?;
+    // Only channel members can create invites
+    let is_member = database::is_channel_member(&state.db_pool, &channel_id, user).await?;
     if !is_member {
         let err = rmp_serde::to_vec_named(&serde_json::json!({
             "type": "error", "message": "You must be a channel member to create invites",
-        })).map_err(|e| e.to_string())?;
-        conn.tx.send(err).await.map_err(|e| e.to_string())?;
+        }))?;
+        conn.tx.send(err).await?;
         return Ok(());
     }
 
@@ -1027,8 +1024,7 @@ async fn handle_create_invite(
             .as_secs() as i64 + ttl
     });
 
-    database::create_invite(&state.db_pool, &token, &channel_id, user, max_uses, expires_at)
-        .await.map_err(|e| e.to_string())?;
+    database::create_invite(&state.db_pool, &token, &channel_id, user, max_uses, expires_at).await?;
 
     let response = rmp_serde::to_vec_named(&serde_json::json!({
         "type": "invite_created",
@@ -1036,8 +1032,8 @@ async fn handle_create_invite(
         "invite_token": hex::encode(token),
         "max_uses": max_uses,
         "expires_at": expires_at,
-    })).map_err(|e| e.to_string())?;
-    conn.tx.send(response).await.map_err(|e| e.to_string())?;
+    }))?;
+    conn.tx.send(response).await?;
 
     info!("Invite created for channel {} by {} (uses: {}, expires: {:?})",
         hex::encode(&channel_id[..8.min(channel_id.len())]),
@@ -1051,10 +1047,10 @@ async fn handle_create_invite(
 // ---------------------------------------------------------------------------
 
 async fn handle_get_ice_config(
-    conn: &mut Connection,
+    conn: &Connection,
     state: &Arc<ServerState>,
-) -> Result<(), String> {
-    let pubkey = conn.pubkey.as_ref().ok_or("Not authenticated")?;
+) -> anyhow::Result<()> {
+    let pubkey = conn.pubkey.as_ref().ok_or_else(|| anyhow::anyhow!("Not authenticated"))?;
     let config = &state.config;
 
     let mut ice_servers = Vec::new();
@@ -1082,7 +1078,7 @@ async fn handle_get_ice_config(
             use sha1::Sha1;
             type HmacSha1 = Hmac<Sha1>;
             let mut mac = HmacSha1::new_from_slice(secret.as_bytes())
-                .map_err(|e| format!("HMAC error: {}", e))?;
+                .map_err(|_| anyhow::anyhow!("HMAC key error"))?;
             mac.update(username.as_bytes());
             let credential = base64::Engine::encode(
                 &base64::engine::general_purpose::STANDARD,
@@ -1106,10 +1102,9 @@ async fn handle_get_ice_config(
     let response = rmp_serde::to_vec_named(&serde_json::json!({
         "type": "ice_config",
         "ice_servers": ice_servers,
-    })).map_err(|e| format!("Serialization error: {}", e))?;
+    }))?;
 
-    conn.tx.send(response).await
-        .map_err(|e| format!("Failed to send ICE config: {}", e))?;
+    conn.tx.send(response).await?;
 
     Ok(())
 }
