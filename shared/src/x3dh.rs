@@ -92,7 +92,7 @@ impl X3DHHandshake {
             .map_err(|_| CryptoError::InvalidSignature)?;
 
         // 2. Generate ephemeral key pair
-        let ephemeral_secret = ReusableSecret::random_from_rng(&mut rand::thread_rng());
+        let ephemeral_secret = ReusableSecret::random_from_rng(&mut rand::rngs::OsRng);
         let ephemeral_public = PublicKey::from(&ephemeral_secret);
 
         // 3. DH calculations using the X25519 identity keys directly
@@ -248,7 +248,7 @@ pub fn generate_pre_key_bundle(
     num_one_time_keys: usize,
 ) -> (PreKeyBundle, PrivatePreKeys) {
     // Generate signed pre-key
-    let signed_pre_key_secret = StaticSecret::random_from_rng(&mut rand::thread_rng());
+    let signed_pre_key_secret = StaticSecret::random_from_rng(&mut rand::rngs::OsRng);
     let signed_pre_key_public = PublicKey::from(&signed_pre_key_secret);
 
     // Sign the pre-key with Ed25519 identity key
@@ -259,7 +259,7 @@ pub fn generate_pre_key_bundle(
     let mut one_time_private = Vec::with_capacity(num_one_time_keys);
 
     for _ in 0..num_one_time_keys {
-        let secret = StaticSecret::random_from_rng(&mut rand::thread_rng());
+        let secret = StaticSecret::random_from_rng(&mut rand::rngs::OsRng);
         let public = PublicKey::from(&secret);
         one_time_public.push(public);
         one_time_private.push(secret);

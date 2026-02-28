@@ -130,7 +130,7 @@ pub fn pad_to_bucket(plaintext: &[u8]) -> Result<Vec<u8>> {
     let padding_len = padded_size - padding_start;
 
     if padding_len > 0 {
-        rand::thread_rng().fill_bytes(&mut padded[padding_start..]);
+        rand::rngs::OsRng.fill_bytes(&mut padded[padding_start..]);
     }
 
     Ok(padded)

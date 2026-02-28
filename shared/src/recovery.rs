@@ -11,7 +11,7 @@ use zerocopy::IntoBytes;
 ///
 /// Uses the English wordlist with 256 bits of entropy.
 pub fn generate_mnemonic() -> Result<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::OsRng;
     let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, 24)
         .map_err(|e| CryptoError::InvalidMnemonic(e.to_string()))?;
 

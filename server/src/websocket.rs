@@ -227,9 +227,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>, addr: SocketA
 
     // Generate auth challenge
     let auth_challenge: Vec<u8> = {
+        use rand::rngs::OsRng;
         use rand::RngCore;
         let mut nonce = vec![0u8; 32];
-        rand::thread_rng().fill_bytes(&mut nonce);
+        OsRng.fill_bytes(&mut nonce);
         nonce
     };
 

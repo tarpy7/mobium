@@ -220,7 +220,7 @@ impl DoubleRatchet {
         // We generate random bytes first so we can retain a copy for
         // serialization, then construct the ReusableSecret deterministically.
         let mut dh_bytes = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut dh_bytes);
+        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut dh_bytes);
         let our_dh = ReusableSecret::random_from_rng(&mut FixedRng(dh_bytes));
         let our_dh_pub = PublicKey::from(&our_dh);
 
@@ -405,7 +405,7 @@ impl DoubleRatchet {
         // Capture raw bytes before constructing the secret so we can
         // persist them in save().
         let mut new_dh_bytes = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut new_dh_bytes);
+        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut new_dh_bytes);
         let new_dh = ReusableSecret::random_from_rng(&mut FixedRng(new_dh_bytes));
         let new_dh_pub = PublicKey::from(&new_dh);
 
@@ -567,25 +567,7 @@ impl DoubleRatchet {
 
     /// Serialise to bytes with an externally-provided DH private key.
     ///
-    /// **Deprecated**: Prefer [`save()`](Self::save) which now uses the
-    /// internally-tracked `our_dh_private_bytes`. This method is retained
-    /// only for backward compatibility with existing tests.
-    pub fn save_with_key(&self, our_dh_private_bytes: Option<[u8; 32]>) -> Result<Vec<u8>> {
-        let state = RatchetState {
-            root_key: self.root_key.clone(),
-            send_chain_key: self.send_chain_key.clone(),
-            recv_chain_key: self.recv_chain_key.clone(),
-            our_dh_private: our_dh_private_bytes,
-            our_dh_public: self.our_dh_public.map(|pk| *pk.as_bytes()),
-            their_dh_public: self.their_dh_public.map(|pk| *pk.as_bytes()),
-            send_message_number: self.send_message_number,
-            recv_message_number: self.recv_message_number,
-            previous_chain_length: self.previous_chain_length,
-            skipped_keys: self.skipped_keys.clone(),
-        };
-        rmp_serde::to_vec(&state)
-            .map_err(|e| CryptoError::StorageError(format!("Serialization failed: {e}")))
-    }
+
 }
 
 // ─────────── FixedRng for deterministic secret construction ────────
@@ -727,7 +709,7 @@ mod tests {
     /// Helper: create Alice + Bob ratchets from a shared secret and Bob's SPK.
     fn make_pair() -> (DoubleRatchet, DoubleRatchet) {
         let shared_secret = [0x42u8; 32];
-        let bob_spk_secret = StaticSecret::random_from_rng(&mut rand::thread_rng());
+        let bob_spk_secret = StaticSecret::random_from_rng(&mut rand::rngs::OsRng);
         let bob_spk_public = PublicKey::from(&bob_spk_secret);
 
         let alice = DoubleRatchet::init_alice(&shared_secret, &bob_spk_public).unwrap();
@@ -829,7 +811,7 @@ mod tests {
         assert_eq!(pt, b"before save");
 
         // Save Bob's state (we need to know his private key bytes for save).
-        // For this test, we'll use save_with_key with None since we can't
+        // For this test, we'll use save with None since we can't
         // extract ReusableSecret bytes. Instead, test via load with a fresh pair.
 
         // A more complete roundtrip: create a ratchet, save with known bytes, load, use.
@@ -888,7 +870,7 @@ mod tests {
     #[test]
     fn test_init_alice_keypair_consistency() {
         let shared_secret = [0x42u8; 32];
-        let bob_spk_secret = StaticSecret::random_from_rng(&mut rand::thread_rng());
+        let bob_spk_secret = StaticSecret::random_from_rng(&mut rand::rngs::OsRng);
         let bob_spk_pub = PublicKey::from(&bob_spk_secret);
 
         let alice = DoubleRatchet::init_alice(&shared_secret, &bob_spk_pub).unwrap();

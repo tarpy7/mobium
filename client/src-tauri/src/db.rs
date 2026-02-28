@@ -751,7 +751,7 @@ async fn hash_setting_key(state: &AppState, key: &str) -> Result<String> {
 /// Save a Double Ratchet session state for a peer, encrypted at rest.
 ///
 /// `peer_pubkey` is the peer's Ed25519 public key (hex).
-/// `ratchet_bytes` is the serialized ratchet state (from `DoubleRatchet::save_with_key()`).
+/// `ratchet_bytes` is the serialized ratchet state (from `DoubleRatchet::save()`).
 /// `associated_data` is the X3DH AD (IK_A || IK_B) needed for encrypt/decrypt.
 pub async fn save_ratchet_session(
     state: &AppState,

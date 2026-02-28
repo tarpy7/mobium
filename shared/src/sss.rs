@@ -53,7 +53,7 @@ pub fn create_shards(secret: &[u8], total_shares: u8, threshold: u8) -> Result<V
         let mut coefficients: Vec<u8> = vec![0; threshold as usize];
         coefficients[0] = secret_byte; // Secret is the constant term
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rngs::OsRng;
         for i in 1..threshold as usize {
             let mut byte = [0u8; 1];
             rng.fill_bytes(&mut byte);
