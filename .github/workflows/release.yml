@@ -129,11 +129,11 @@ jobs:
       # Windows: .msi + NSIS .exe
       - name: Collect Windows artifacts
         if: matrix.target == 'windows'
-        shell: bash
+        shell: powershell
         run: |
-          mkdir -p dist
-          find . -path "*/bundle/msi/*.msi" -exec cp {} dist/${{ matrix.artifact }}.msi \; 2>/dev/null || true
-          find . -path "*/bundle/nsis/*.exe" -exec cp {} dist/${{ matrix.artifact }}-setup.exe \; 2>/dev/null || true
+          New-Item -ItemType Directory -Force -Path dist
+          Get-ChildItem -Recurse -Filter "*.msi" | Where-Object { $_.FullName -match "bundle" } | ForEach-Object { Copy-Item $_.FullName -Destination "dist/${{ matrix.artifact }}.msi" }
+          Get-ChildItem -Recurse -Filter "*.exe" | Where-Object { $_.FullName -match "bundle[/\\]nsis" } | ForEach-Object { Copy-Item $_.FullName -Destination "dist/${{ matrix.artifact }}-setup.exe" }
 
       # macOS: .dmg
       - name: Collect macOS artifacts
@@ -143,7 +143,8 @@ jobs:
           find . -path "*/bundle/dmg/*.dmg" -exec cp {} dist/${{ matrix.artifact }}.dmg \; 2>/dev/null || true
 
       - name: List dist
-        run: ls -lh dist/ || echo "No artifacts"
+        shell: bash
+        run: ls -lhR dist/ 2>/dev/null || echo "No artifacts found"
 
       - uses: actions/upload-artifact@v4
         with:
