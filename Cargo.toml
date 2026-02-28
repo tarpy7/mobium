@@ -1,0 +1,40 @@
+[workspace]
+members = ["shared", "server", "client/src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["SecureComm Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/securecomm/securecomm"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+strip = true
+
+[profile.release-small]
+inherits = "release"
+opt-level = "s"
+lto = true
+strip = true
+
+[profile.test]
+opt-level = 1
+debug = true
+
+[profile.coverage]
+inherits = "test"
+opt-level = 0
+debug = true
+incremental = false

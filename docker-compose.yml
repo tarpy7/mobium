@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: securecomm-server
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      - SC_HOST=0.0.0.0
+      - SC_PORT=8443
+      - SC_DATABASE_URL=sqlite:///data/securecomm.db
+      - SC_TLS_CERT=/app/certs/cert.pem
+      - SC_TLS_KEY=/app/certs/key.pem
+      - SC_REQUIRE_TLS=true
+      - RUST_LOG=securecomm_server=debug,axum=info
+    volumes:
+      - ./data:/data
+      - ./certs:/app/certs:ro
+    networks:
+      - securecomm
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Caddy reverse proxy for TLS termination
+  # Uncomment if you prefer to handle TLS at the proxy level
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: securecomm-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   networks:
+  #     - securecomm
+  #   depends_on:
+  #     - server
+
+networks:
+  securecomm:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

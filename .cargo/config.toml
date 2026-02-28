@@ -1,0 +1,15 @@
+[profile.test]
+opt-level = 1
+debug = true
+lto = false
+
+[profile.test.package.rand]
+opt-level = 3
+
+[profile.test.package.ring]
+opt-level = 3
+
+[profile.coverage]
+inherits = "test"
+opt-level = 0
+debug = true
