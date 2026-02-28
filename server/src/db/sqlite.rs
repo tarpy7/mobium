@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! SQLite implementation of DatabaseBackend
 //!
 //! This wraps the existing database.rs functions to implement the trait.

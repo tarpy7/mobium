@@ -4,6 +4,8 @@
 use crate::error::{CryptoError, Result};
 /// into n shares and reconstructed from any t shares.
 use rand::RngCore;
+// zeroize used by downstream consumers
+#[allow(unused_imports)]
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A share of the secret

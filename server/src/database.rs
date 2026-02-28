@@ -386,6 +386,7 @@ pub async fn store_user(
 }
 
 /// Update user last seen
+#[allow(dead_code)]
 pub async fn update_last_seen(pool: &Pool<Sqlite>, pubkey: &[u8]) -> Result<()> {
     sqlx::query(
         r#"
@@ -565,6 +566,7 @@ pub async fn get_channel_history(
 }
 
 /// Check if a channel exists
+#[allow(dead_code)]
 pub async fn channel_exists(
     pool: &Pool<Sqlite>,
     channel_id: &[u8],

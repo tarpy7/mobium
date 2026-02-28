@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Database abstraction layer
 //!
 //! Defines the `DatabaseBackend` trait that abstracts all database operations.

@@ -87,6 +87,7 @@ fn build_tls_config(
 }
 
 /// Generate a self-signed certificate for development
+#[allow(dead_code)]
 pub async fn generate_self_signed_cert(cert_path: &str, key_path: &str) -> Result<()> {
     use rcgen::{generate_simple_self_signed, CertifiedKey};
     

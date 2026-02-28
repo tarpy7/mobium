@@ -1,6 +1,6 @@
 //! Authentication utilities
 
-use ed25519_dalek::{VerifyingKey, Signature, Verifier};
+use ed25519_dalek::{VerifyingKey, Signature};
 
 /// Verify a challenge signature
 /// 
