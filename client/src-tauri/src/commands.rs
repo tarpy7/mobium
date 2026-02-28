@@ -702,6 +702,39 @@ async fn _reset_identity(state: State<'_, AppState>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Fetch ICE (STUN/TURN) configuration from the connected server.
+///
+/// The server generates time-limited HMAC credentials for TURN if configured.
+/// Falls back to empty config if not connected.
+#[tauri::command]
+pub async fn get_ice_config(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Ok(serde_json::json!({ "ice_servers": [] })),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_ice_config",
+    })).map_err(|e| format!("Serialization error: {}", e))?;
+
+    conn.send(msg).await.map_err(|e| format!("Failed to send: {}", e))?;
+
+    // Wait for response via the connection's ICE config channel
+    let rx = conn.take_ice_config_response().await
+        .ok_or_else(|| "No ICE config response channel available".to_string())?;
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(response)) => Ok(response),
+        Ok(Err(_)) => Ok(serde_json::json!({ "ice_servers": [] })),
+        Err(_) => Ok(serde_json::json!({ "ice_servers": [] })),
+    }
+}
+
 /// Lock the current profile — wipes all cryptographic material from memory.
 ///
 /// After locking, the user must re-enter their password to unlock.

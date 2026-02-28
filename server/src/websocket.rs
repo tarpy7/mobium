@@ -411,6 +411,7 @@ async fn handle_binary_message(
         "leave_voice" => handle_leave_voice(&msg, conn, state).await,
         "voice_data" => handle_voice_data_raw(data, &msg, conn, state).await,
         "screen_data" => handle_screen_data_raw(data, &msg, conn, state).await,
+        "get_ice_config" => handle_get_ice_config(conn, state).await,
         "ping" => {
             let pong = rmp_serde::to_vec_named(&serde_json::json!({"type": "pong"}))?;
             conn.tx.send(pong).await?;
@@ -909,6 +910,74 @@ async fn handle_get_prekey_count(
         "count": count,
     }))?;
     conn.tx.send(resp).await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// ICE configuration (server-provided STUN/TURN)
+// ---------------------------------------------------------------------------
+
+async fn handle_get_ice_config(
+    conn: &mut Connection,
+    state: &Arc<ServerState>,
+) -> Result<(), String> {
+    let pubkey = conn.pubkey.as_ref().ok_or("Not authenticated")?;
+    let config = &state.config;
+
+    let mut ice_servers = Vec::new();
+
+    // Add STUN server if configured
+    if let Some(ref stun_url) = config.ice_stun_url {
+        ice_servers.push(serde_json::json!({
+            "urls": [stun_url],
+        }));
+    }
+
+    // Add TURN server with HMAC credentials if configured
+    if let Some(ref turn_url) = config.ice_turn_url {
+        if let Some(ref secret) = config.ice_turn_secret {
+            // Generate time-limited HMAC-SHA1 credentials (coturn use-auth-secret format)
+            let ttl = config.ice_ttl;
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() + ttl;
+            let username = format!("{}:{}", timestamp, hex::encode(pubkey));
+
+            // HMAC-SHA1(secret, username) -> base64 = password
+            use hmac::{Hmac, Mac};
+            use sha1::Sha1;
+            type HmacSha1 = Hmac<Sha1>;
+            let mut mac = HmacSha1::new_from_slice(secret.as_bytes())
+                .map_err(|e| format!("HMAC error: {}", e))?;
+            mac.update(username.as_bytes());
+            let credential = base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                mac.finalize().into_bytes(),
+            );
+
+            ice_servers.push(serde_json::json!({
+                "urls": [turn_url],
+                "username": username,
+                "credential": credential,
+                "ttl": ttl,
+            }));
+        } else {
+            // TURN without auth (not recommended, but supported)
+            ice_servers.push(serde_json::json!({
+                "urls": [turn_url],
+            }));
+        }
+    }
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "ice_config",
+        "ice_servers": ice_servers,
+    })).map_err(|e| format!("Serialization error: {}", e))?;
+
+    conn.tx.send(response).await
+        .map_err(|e| format!("Failed to send ICE config: {}", e))?;
+
     Ok(())
 }
 

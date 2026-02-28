@@ -126,6 +126,9 @@ fn main() {
             commands::publish_prekeys,
             commands::has_dm_session,
             
+            // ICE config
+            commands::get_ice_config,
+            
             // Profile lock
             commands::lock_profile,
             

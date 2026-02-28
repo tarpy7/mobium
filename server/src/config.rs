@@ -39,6 +39,14 @@ pub struct ServerConfig {
     pub admin_token: Option<String>,
     /// Seconds to wait for authentication before dropping connection
     pub auth_timeout_seconds: u64,
+    /// STUN server URL (e.g. stun:stun.l.google.com:19302)
+    pub ice_stun_url: Option<String>,
+    /// TURN server URL (e.g. turn:turn.example.com:3478)
+    pub ice_turn_url: Option<String>,
+    /// Shared secret for coturn use-auth-secret HMAC credential generation
+    pub ice_turn_secret: Option<String>,
+    /// TURN credential lifetime in seconds (default: 86400 = 24h)
+    pub ice_ttl: u64,
 }
 
 impl ServerConfig {
@@ -91,6 +99,13 @@ impl ServerConfig {
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()
                 .context("Invalid SC_AUTH_TIMEOUT")?,
+            ice_stun_url: env::var("SC_ICE_STUN_URL").ok(),
+            ice_turn_url: env::var("SC_ICE_TURN_URL").ok(),
+            ice_turn_secret: env::var("SC_ICE_TURN_SECRET").ok(),
+            ice_ttl: env::var("SC_ICE_TTL")
+                .unwrap_or_else(|_| "86400".to_string())
+                .parse()
+                .context("Invalid SC_ICE_TTL")?,
         };
 
         Ok(config)

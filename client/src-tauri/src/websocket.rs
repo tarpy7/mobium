@@ -69,6 +69,8 @@ pub struct Connection {
     prekey_response_tx: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<serde_json::Value>>>,
     #[allow(dead_code)]
     prekey_response_rx: tokio::sync::Mutex<Option<tokio::sync::oneshot::Receiver<serde_json::Value>>>,
+    /// Oneshot channel for receiving ICE config responses.
+    ice_config_response_tx: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<serde_json::Value>>>,
 }
 
 impl Connection {
@@ -91,6 +93,20 @@ impl Connection {
     /// Called by the WS handler when a prekey_bundle_response arrives.
     async fn deliver_prekey_response(&self, value: serde_json::Value) {
         if let Some(tx) = self.prekey_response_tx.lock().await.take() {
+            let _ = tx.send(value);
+        }
+    }
+
+    /// Prepare a oneshot channel for receiving an ICE config response.
+    pub async fn take_ice_config_response(&self) -> Option<tokio::sync::oneshot::Receiver<serde_json::Value>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        *self.ice_config_response_tx.lock().await = Some(tx);
+        Some(rx)
+    }
+
+    /// Called by the WS handler when an ice_config response arrives.
+    async fn deliver_ice_config_response(&self, value: serde_json::Value) {
+        if let Some(tx) = self.ice_config_response_tx.lock().await.take() {
             let _ = tx.send(value);
         }
     }
@@ -236,6 +252,7 @@ pub async fn connect(server_url: String, app_handle: AppHandle, state: State<'_,
         tx,
         prekey_response_tx: tokio::sync::Mutex::new(None),
         prekey_response_rx: tokio::sync::Mutex::new(None),
+        ice_config_response_tx: tokio::sync::Mutex::new(None),
     });
     let mut conn_guard = state.connection.write().await;
     *conn_guard = Some(connection);
@@ -1789,6 +1806,14 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
             }
         }
         
+        "ice_config" => {
+            info!("Received ICE config from server");
+            let conn_guard = app_state.connection.read().await;
+            if let Some(conn) = conn_guard.as_ref() {
+                conn.deliver_ice_config_response(msg.clone()).await;
+            }
+        }
+
         "prekeys_stored" => {
             info!("Server confirmed pre-keys stored");
         }

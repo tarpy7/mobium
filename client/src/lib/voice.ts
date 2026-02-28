@@ -22,13 +22,41 @@ import { invoke } from '@tauri-apps/api/core';
 import { get } from 'svelte/store';
 import { voiceCallStore, displayName, addToast, type VoiceCallState } from '$lib/stores';
 
-// STUN servers for NAT traversal (public, no credentials needed)
-const ICE_SERVERS: RTCConfiguration = {
+// ICE configuration — fetched from server after auth, with fallback
+let cachedIceConfig: RTCConfiguration | null = null;
+let iceConfigExpiry = 0;
+
+const FALLBACK_ICE: RTCConfiguration = {
 	iceServers: [
 		{ urls: 'stun:stun.l.google.com:19302' },
-		{ urls: 'stun:stun1.l.google.com:19302' },
 	],
 };
+
+async function getIceConfig(): Promise<RTCConfiguration> {
+	const now = Date.now();
+	if (cachedIceConfig && now < iceConfigExpiry) {
+		return cachedIceConfig;
+	}
+	try {
+		const { invoke } = await import('@tauri-apps/api/core');
+		const config = await invoke<{ ice_servers: Array<{ urls: string[]; username?: string; credential?: string; ttl?: number }> }>('get_ice_config');
+		if (config && config.ice_servers && config.ice_servers.length > 0) {
+			const iceServers = config.ice_servers.map(s => ({
+				urls: s.urls,
+				...(s.username && { username: s.username }),
+				...(s.credential && { credential: s.credential }),
+			}));
+			cachedIceConfig = { iceServers };
+			// Cache for TTL minus 5min buffer, or 1h default
+			const ttl = config.ice_servers.find(s => s.ttl)?.ttl || 3600;
+			iceConfigExpiry = now + (ttl - 300) * 1000;
+			return cachedIceConfig;
+		}
+	} catch (e) {
+		console.warn('Failed to fetch ICE config from server, using fallback:', e);
+	}
+	return FALLBACK_ICE;
+}
 
 let peerConnection: RTCPeerConnection | null = null;
 let localStream: MediaStream | null = null;
@@ -207,8 +235,9 @@ export async function startCall(peerPubkey: string): Promise<void> {
 			video: false,
 		});
 
-		// Create peer connection
-		peerConnection = new RTCPeerConnection(ICE_SERVERS);
+		// Create peer connection with server-provided ICE config
+		const iceConfig = await getIceConfig();
+		peerConnection = new RTCPeerConnection(iceConfig);
 		setupPeerConnectionHandlers(peerPubkey);
 
 		// Add local audio tracks to the connection
@@ -263,8 +292,9 @@ export async function acceptCall(): Promise<void> {
 			video: false,
 		});
 
-		// Create peer connection
-		peerConnection = new RTCPeerConnection(ICE_SERVERS);
+		// Create peer connection with server-provided ICE config
+		const iceConfig = await getIceConfig();
+		peerConnection = new RTCPeerConnection(iceConfig);
 		setupPeerConnectionHandlers(peerPubkey);
 
 		// Add local audio tracks
