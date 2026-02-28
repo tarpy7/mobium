@@ -48,3 +48,4 @@ node_modules/
 
 # Test artifacts
 test_artifacts/release/
+release/
