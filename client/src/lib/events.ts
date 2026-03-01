@@ -200,6 +200,18 @@ export async function setupEventListeners() {
 			showNotification(senderName, preview);
 		}),
 
+		// DM session established (X3DH complete) — add conversation to sidebar
+		listen<{ peer: string }>('dm_session_established', (event) => {
+			const { peer } = event.payload;
+			console.log('[event] dm_session_established:', peer);
+			upsertConversation({
+				id: peer,
+				name: displayName(peer),
+				type: 'dm',
+				unreadCount: 0,
+			});
+		}),
+
 		// History loaded — backend tells us to reload messages from local DB
 		listen<{ channel_id: string }>('history_loaded', (event) => {
 			const { channel_id } = event.payload;

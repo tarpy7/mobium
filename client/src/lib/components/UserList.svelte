@@ -68,7 +68,10 @@
 		nicknameInput = '';
 	}
 
-	function startDm(pubkey: string) {
+	let initializingDm = $state<string | null>(null);
+
+	async function startDm(pubkey: string) {
+		// Immediately show the conversation
 		upsertConversation({
 			id: pubkey,
 			name: displayName(pubkey),
@@ -76,6 +79,18 @@
 			unreadCount: 0,
 		});
 		activeConversationStore.set(pubkey);
+
+		// Perform X3DH key exchange in the background so the session
+		// is ready before either party sends a message
+		initializingDm = pubkey;
+		try {
+			const result = await invoke<string>('init_dm_session', { recipient: pubkey });
+			console.log('[UserList] DM session init:', result);
+		} catch (e) {
+			console.warn('[UserList] DM session init failed (will retry on first message):', e);
+			// Not fatal — X3DH will happen on first send_message if this fails
+		}
+		initializingDm = null;
 		onclose();
 	}
 
@@ -207,11 +222,18 @@
 								</button>
 							</div>
 
-							<!-- DM indicator (always visible) -->
+							<!-- DM indicator / loading spinner -->
 							<div class="flex-shrink-0 ml-1 text-text-muted group-hover:text-primary transition">
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-								</svg>
+								{#if initializingDm === user.pubkey}
+									<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+									</svg>
+								{:else}
+									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+									</svg>
+								{/if}
 							</div>
 						</div>
 					</div>

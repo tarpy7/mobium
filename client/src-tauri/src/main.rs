@@ -126,6 +126,7 @@ fn main() {
             // DM / X3DH
             commands::publish_prekeys,
             commands::has_dm_session,
+            commands::init_dm_session,
             
             // ICE config
             commands::get_ice_config,

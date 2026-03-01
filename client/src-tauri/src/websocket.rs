@@ -868,6 +868,114 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                         
                         content
                     }
+                    "x3dh_session_init" => {
+                        // Session initialization — no message content, just key exchange.
+                        // Perform the responder side of X3DH and create the ratchet session.
+                        info!("Processing X3DH session init from {}", &sender_hex[..16.min(sender_hex.len())]);
+
+                        let ephemeral_pub_bytes = dm_msg.get("ephemeral_pub")
+                            .and_then(|v| extract_byte_array_from_value(Some(v)))
+                            .ok_or_else(|| anyhow::anyhow!("Missing ephemeral_pub in session init"))?;
+                        let one_time_key_used = dm_msg.get("one_time_key_used")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+
+                        let ephemeral_pub = x25519_dalek::PublicKey::from(
+                            <[u8; 32]>::try_from(ephemeral_pub_bytes.as_slice())
+                                .map_err(|_| anyhow::anyhow!("Invalid ephemeral key"))?
+                        );
+
+                        // Get sender's X25519 key
+                        let sender_x25519_pub_bytes = dm_msg.get("sender_x25519_pub")
+                            .and_then(|v| extract_byte_array_from_value(Some(v)));
+                        let sender_x25519 = if let Some(ref bytes) = sender_x25519_pub_bytes {
+                            x25519_dalek::PublicKey::from(
+                                <[u8; 32]>::try_from(bytes.as_slice())
+                                    .map_err(|_| anyhow::anyhow!("Invalid sender X25519 key"))?
+                            )
+                        } else {
+                            // Try cached key
+                            let x25519_keys = app_state.x25519_keys.read().await;
+                            let key_bytes = x25519_keys.get(&sender.to_vec())
+                                .ok_or_else(|| anyhow::anyhow!("No X25519 key for sender"))?;
+                            x25519_dalek::PublicKey::from(
+                                <[u8; 32]>::try_from(key_bytes.as_slice())
+                                    .map_err(|_| anyhow::anyhow!("Invalid cached X25519 key"))?
+                            )
+                        };
+
+                        // Cache the X25519 key
+                        if let Some(ref bytes) = sender_x25519_pub_bytes {
+                            let mut x25519_keys = app_state.x25519_keys.write().await;
+                            x25519_keys.insert(sender.to_vec(), bytes.clone());
+                        }
+
+                        // Our identity and pre-keys
+                        let identity = {
+                            let guard = app_state.identity.read().await;
+                            guard.as_ref()
+                                .ok_or_else(|| anyhow::anyhow!("No identity"))?
+                                .clone()
+                        };
+
+                        let sender_ed25519 = ed25519_dalek::VerifyingKey::from_bytes(
+                            &<[u8; 32]>::try_from(sender.as_ref())
+                                .map_err(|_| anyhow::anyhow!("Invalid sender Ed25519 key"))?
+                        ).map_err(|_| anyhow::anyhow!("Invalid Ed25519 key"))?;
+
+                        let otpk_index = if one_time_key_used { Some(0usize) } else { None };
+
+                        let (shared_secret, ad) = {
+                            let prekeys_guard = app_state.our_prekeys.read().await;
+                            let prekeys = prekeys_guard.as_ref()
+                                .ok_or_else(|| anyhow::anyhow!("No pre-keys available"))?;
+
+                            let handshake = x3dh::X3DHHandshake::responder(
+                                &identity,
+                                prekeys,
+                                &sender_ed25519,
+                                &sender_x25519,
+                                &ephemeral_pub,
+                                otpk_index,
+                            ).map_err(|e| anyhow::anyhow!("X3DH responder failed: {}", e))?;
+
+                            (*handshake.shared_secret(), handshake.associated_data().to_vec())
+                        };
+
+                        // Initialize ratchet as Bob (responder)
+                        let spk_bytes = {
+                            let guard = app_state.our_spk_bytes.read().await;
+                            guard.ok_or_else(|| anyhow::anyhow!("No SPK bytes"))?
+                        };
+                        let our_ratchet_key = x25519_dalek::StaticSecret::from(spk_bytes);
+                        let ratchet = DoubleRatchet::init_bob(&shared_secret, &our_ratchet_key)
+                            .map_err(|e| anyhow::anyhow!("Ratchet init failed: {}", e))?;
+
+                        // Store session
+                        {
+                            let mut sessions = app_state.ratchet_sessions.write().await;
+                            sessions.insert(sender_hex.clone(), ratchet);
+                        }
+                        {
+                            let mut ad_map = app_state.ratchet_ad.write().await;
+                            ad_map.insert(sender_hex.clone(), ad);
+                        }
+                        persist_ratchet_session_ws(&app_state, &sender_hex).await;
+
+                        // Create conversation on receiver side
+                        let display_name = &sender_hex[..16.min(sender_hex.len())];
+                        let _ = db::store_conversation(&app_state, &sender_hex, display_name, "dm").await;
+
+                        // Emit event so UI updates immediately
+                        let _ = app.emit("dm_session_established", serde_json::json!({
+                            "peer": sender_hex.clone(),
+                        }));
+
+                        info!("X3DH session init complete — session established with {}", &sender_hex[..16.min(sender_hex.len())]);
+
+                        // No content to display — this is just a session init
+                        return Ok(());
+                    }
                     _ => {
                         // Unknown DM type — try plaintext fallback
                         warn!("Unknown dm_type '{}' — treating as plaintext", dm_type);

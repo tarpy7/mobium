@@ -596,6 +596,150 @@ fn extract_byte_array_from_json(value: &serde_json::Value) -> Option<Vec<u8>> {
     None
 }
 
+/// Initialize a DM session with a peer — performs X3DH key exchange upfront
+/// and sends a session-init signal so the conversation appears on both sides
+/// immediately, without requiring either party to send a text message first.
+#[tauri::command]
+pub async fn init_dm_session(
+    recipient: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    tracing::info!("init_dm_session: initiating with {}", &recipient[..16.min(recipient.len())]);
+
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let recipient_bytes = hex::decode(&recipient)
+        .map_err(|_| "Invalid recipient pubkey hex".to_string())?;
+
+    // Check if we already have a ratchet session
+    {
+        let sessions = state.ratchet_sessions.read().await;
+        if sessions.contains_key(&recipient) {
+            tracing::info!("init_dm_session: session already exists with {}", &recipient[..16.min(recipient.len())]);
+            // Still store conversation locally in case it's missing
+            let display = &recipient[..16.min(recipient.len())];
+            let _ = db::store_conversation(&state, &recipient, display, "dm").await;
+            return Ok("existing".to_string());
+        }
+    }
+
+    // Request pre-key bundle
+    let bundle_response = request_prekey_bundle(&conn, &recipient_bytes).await?;
+
+    // Parse the bundle
+    let identity_x25519_bytes: Vec<u8> = bundle_response.get("identity_x25519_pub")
+        .and_then(|v| extract_byte_array_from_json(v))
+        .ok_or_else(|| "Recipient has no pre-keys published. They need to connect first.".to_string())?;
+    let signed_prekey_bytes: Vec<u8> = bundle_response.get("signed_prekey")
+        .and_then(|v| extract_byte_array_from_json(v))
+        .ok_or_else(|| "Missing signed_prekey in bundle".to_string())?;
+    let signed_prekey_sig_bytes: Vec<u8> = bundle_response.get("signed_prekey_sig")
+        .and_then(|v| extract_byte_array_from_json(v))
+        .ok_or_else(|| "Missing signed_prekey_sig in bundle".to_string())?;
+    let one_time_prekey_bytes: Option<Vec<u8>> = bundle_response.get("one_time_prekey")
+        .and_then(|v| {
+            if v.is_null() { None } else { extract_byte_array_from_json(v) }
+        });
+
+    let their_identity_key = ed25519_dalek::VerifyingKey::from_bytes(
+        &<[u8; 32]>::try_from(recipient_bytes.as_slice())
+            .map_err(|_| "Invalid recipient pubkey length")?
+    ).map_err(|_| "Invalid recipient Ed25519 key")?;
+
+    let their_identity_x25519 = x25519_dalek::PublicKey::from(
+        <[u8; 32]>::try_from(identity_x25519_bytes.as_slice())
+            .map_err(|_| "Invalid X25519 key length")?
+    );
+
+    let their_signed_prekey = x25519_dalek::PublicKey::from(
+        <[u8; 32]>::try_from(signed_prekey_bytes.as_slice())
+            .map_err(|_| "Invalid signed prekey length")?
+    );
+
+    let their_sig = ed25519_dalek::Signature::from_bytes(
+        &<[u8; 64]>::try_from(signed_prekey_sig_bytes.as_slice())
+            .map_err(|_| "Invalid signature length")?
+    );
+
+    let mut one_time_prekeys = Vec::new();
+    let otpk_index = if let Some(ref otpk_bytes) = one_time_prekey_bytes {
+        one_time_prekeys.push(x25519_dalek::PublicKey::from(
+            <[u8; 32]>::try_from(otpk_bytes.as_slice())
+                .map_err(|_| "Invalid OPK length")?
+        ));
+        Some(0usize)
+    } else {
+        None
+    };
+
+    let their_bundle = x3dh::PreKeyBundle {
+        identity_key: their_identity_key,
+        identity_encryption_key: their_identity_x25519,
+        signed_pre_key: their_signed_prekey,
+        signed_pre_key_signature: their_sig,
+        one_time_pre_keys: one_time_prekeys,
+    };
+
+    let identity = {
+        let guard = state.identity.read().await;
+        guard.as_ref().ok_or_else(|| "No identity loaded".to_string())?.clone()
+    };
+
+    // Perform X3DH
+    let (handshake, ephemeral_pub) = x3dh::X3DHHandshake::initiator(
+        &identity,
+        &their_bundle,
+        otpk_index,
+    ).map_err(|e| format!("X3DH failed: {}", e))?;
+
+    let shared_secret = handshake.shared_secret();
+    let ad = handshake.associated_data().to_vec();
+
+    // Initialize Double Ratchet
+    let ratchet = mobium_shared::ratchet::DoubleRatchet::init_alice(shared_secret, &their_signed_prekey)
+        .map_err(|e| format!("Ratchet init failed: {}", e))?;
+
+    // Send a session-init message (empty content, just establishes the DM)
+    let our_x25519_pub = identity.public_encryption_key();
+    let dm_payload = rmp_serde::to_vec_named(&serde_json::json!({
+        "dm_type": "x3dh_session_init",
+        "ephemeral_pub": ephemeral_pub.as_bytes().to_vec(),
+        "sender_x25519_pub": our_x25519_pub.as_bytes().to_vec(),
+        "one_time_key_used": one_time_prekey_bytes.is_some(),
+    })).map_err(|e| format!("Serialization error: {}", e))?;
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "message",
+        "recipient": recipient_bytes,
+        "payload": dm_payload,
+    })).map_err(|e| format!("Serialization error: {}", e))?;
+    conn.send(msg).await.map_err(|e| format!("Failed to send session init: {}", e))?;
+
+    // Store ratchet session
+    {
+        let mut sessions = state.ratchet_sessions.write().await;
+        sessions.insert(recipient.clone(), ratchet);
+    }
+    {
+        let mut ad_map = state.ratchet_ad.write().await;
+        ad_map.insert(recipient.clone(), ad);
+    }
+    persist_ratchet_session(&state, &recipient).await;
+
+    // Store conversation locally
+    let display = &recipient[..16.min(recipient.len())];
+    let _ = db::store_conversation(&state, &recipient, display, "dm").await;
+
+    tracing::info!("init_dm_session: session established with {}", &recipient[..16.min(recipient.len())]);
+    Ok("created".to_string())
+}
+
 /// Get conversations
 #[tauri::command]
 pub async fn get_conversations(state: State<'_, AppState>) -> Result<Vec<db::Conversation>, String> {
