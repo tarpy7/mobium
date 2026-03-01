@@ -1,0 +1,79 @@
+Mobium License
+Version 1.0, March 2026
+
+Copyright (c) 2026 Mobium Contributors
+
+TERMS AND CONDITIONS
+
+1. DEFINITIONS
+
+"Software" refers to the Mobium source code, binaries, documentation,
+and associated files distributed under this license.
+
+"Personal Use" means use by an individual for non-commercial purposes,
+including self-hosting for private communication.
+
+"Commercial Use" means any use intended for or directed toward commercial
+advantage or monetary compensation, including but not limited to:
+offering the Software as a hosted service, bundling with paid products,
+or using the Software within a for-profit organization.
+
+2. GRANT OF RIGHTS
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this Software, to use, copy, and modify the Software for Personal
+Use, subject to the following conditions:
+
+  a. This license notice and copyright shall be included in all copies
+     or substantial portions of the Software.
+
+  b. You may not sublicense, sell, or redistribute the Software or
+     derivative works for Commercial Use without prior written permission
+     from the copyright holders.
+
+  c. You may not use the Software to build competing products or services
+     without prior written permission from the copyright holders.
+
+  d. You may self-host the Software for private, non-commercial use by
+     you and your immediate community.
+
+3. COMMERCIAL LICENSING
+
+For Commercial Use, including offering hosted instances, integrating into
+paid products, or enterprise deployment, contact the copyright holders to
+obtain a commercial license.
+
+4. CONTRIBUTIONS
+
+By submitting contributions (pull requests, patches, issues), you grant
+the copyright holders a perpetual, irrevocable, worldwide, royalty-free
+license to use, modify, and distribute your contributions under this
+license or any future license chosen by the copyright holders.
+
+5. RESTRICTIONS
+
+  a. You may not remove or alter any copyright notices, license text,
+     or attribution from the Software.
+
+  b. You may not use the name "Mobium" or its branding in derivative
+     works without permission.
+
+  c. You may not use the Software for surveillance, mass data collection,
+     or any purpose that undermines user privacy.
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED. THE AUTHORS SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+This software is in ALPHA and has NOT undergone a formal security audit.
+It may contain vulnerabilities. Do not rely on it for life-or-death
+communications until a stable release has been published and independently
+audited.
+
+7. TERMINATION
+
+This license terminates automatically if you violate any of its terms.
+Upon termination, you must destroy all copies of the Software in your
+possession.
