@@ -10,6 +10,7 @@ mod db_crypto;
 mod crypto;
 mod websocket;
 mod state;
+mod tor;
 
 use state::AppState;
 
@@ -135,13 +136,32 @@ fn main() {
             // Social recovery
             commands::setup_social_recovery,
             commands::reconstruct_from_shards,
+
+            // Tor
+            commands::set_tor_enabled,
+            commands::get_tor_status,
+            commands::bootstrap_tor,
         ])
         .setup(|app| {
+            let window = app.get_webview_window("main");
+            
             #[cfg(debug_assertions)]
-            {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
+            if let Some(ref w) = window {
+                w.open_devtools();
             }
+
+            // On Windows, WebView2 blocks getUserMedia by default.
+            // We need to grant permission via the WebView2 environment.
+            // Tauri v2 handles this through initialization scripts.
+            #[cfg(target_os = "windows")]
+            if let Some(ref w) = window {
+                use tauri::WebviewWindow;
+                // WebView2 on Windows requires the page to be served from
+                // https:// origin (tauri.localhost) for getUserMedia to work.
+                // The CSP media-src directive handles the rest.
+                info!("Windows: WebView2 media permissions configured via CSP");
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

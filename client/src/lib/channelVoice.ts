@@ -72,19 +72,32 @@ export async function joinVoice(channelId: string): Promise<void> {
 	audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
 
 	try {
-		mediaStream = await navigator.mediaDevices.getUserMedia({
-			audio: {
-				echoCancellation: true,
-				noiseSuppression: true,
-				autoGainControl: true,
-				sampleRate: SAMPLE_RATE,
-			},
-			video: false,
-		});
+		if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+			throw new Error(
+				'Microphone access is not available in this environment. ' +
+				'On Linux, ensure PipeWire or PulseAudio is running.'
+			);
+		}
+		// Try with full constraints first
+		try {
+			mediaStream = await navigator.mediaDevices.getUserMedia({
+				audio: {
+					echoCancellation: true,
+					noiseSuppression: true,
+					autoGainControl: true,
+					sampleRate: SAMPLE_RATE,
+				},
+				video: false,
+			});
+		} catch {
+			console.warn('[channelVoice] Full constraints failed, trying basic audio');
+			mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+		}
 	} catch (err) {
 		console.error('Failed to get audio input:', err);
 		await invoke('leave_voice_channel');
-		throw new Error('Microphone access denied');
+		const msg = err instanceof Error ? err.message : 'Microphone access denied';
+		throw new Error(msg);
 	}
 
 	// Create Opus encoder

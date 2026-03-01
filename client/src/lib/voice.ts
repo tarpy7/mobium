@@ -22,6 +22,61 @@ import { invoke } from '@tauri-apps/api/core';
 import { get } from 'svelte/store';
 import { voiceCallStore, displayName, addToast, type VoiceCallState } from '$lib/stores';
 
+/**
+ * Request microphone access with fallbacks for Tauri WebView environments.
+ * WebView2 (Windows) and WebKitGTK (Linux) handle getUserMedia differently
+ * from regular browsers — some audio constraints may not be supported.
+ */
+async function getMicrophone(): Promise<MediaStream> {
+	if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+		throw new Error(
+			'Microphone access is not available in this environment. ' +
+			'On Linux, ensure PipeWire or PulseAudio is running. ' +
+			'On Windows, check your microphone privacy settings.'
+		);
+	}
+
+	// Try with full constraints first
+	try {
+		return await navigator.mediaDevices.getUserMedia({
+			audio: {
+				echoCancellation: true,
+				noiseSuppression: true,
+				autoGainControl: true,
+			},
+			video: false,
+		});
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		console.warn('[voice] getUserMedia with constraints failed, trying basic audio:', msg);
+	}
+
+	// Fallback: request basic audio with no constraints
+	try {
+		return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		
+		// Provide helpful error messages
+		if (msg.includes('NotFoundError') || msg.includes('DevicesNotFoundError')) {
+			throw new Error(
+				'No microphone found. Please connect a microphone and try again.'
+			);
+		}
+		if (msg.includes('NotAllowedError') || msg.includes('PermissionDeniedError')) {
+			throw new Error(
+				'Microphone permission denied. Please allow microphone access in your system settings.'
+			);
+		}
+		if (msg.includes('NotReadableError') || msg.includes('TrackStartError')) {
+			throw new Error(
+				'Microphone is in use by another application. Please close other apps using the microphone.'
+			);
+		}
+		throw new Error(`Microphone access failed: ${msg}`);
+	}
+}
+
 // ICE configuration — fetched from server after auth, with fallback
 let cachedIceConfig: RTCConfiguration | null = null;
 let iceConfigExpiry = 0;
@@ -225,15 +280,8 @@ export async function startCall(peerPubkey: string): Promise<void> {
 	startRingback();
 
 	try {
-		// Get microphone access
-		localStream = await navigator.mediaDevices.getUserMedia({
-			audio: {
-				echoCancellation: true,
-				noiseSuppression: true,
-				autoGainControl: true,
-			},
-			video: false,
-		});
+		// Get microphone access (with WebView fallbacks)
+		localStream = await getMicrophone();
 
 		// Create peer connection with server-provided ICE config
 		const iceConfig = await getIceConfig();
@@ -282,15 +330,8 @@ export async function acceptCall(): Promise<void> {
 	updateState({ state: 'connecting' });
 
 	try {
-		// Get microphone access
-		localStream = await navigator.mediaDevices.getUserMedia({
-			audio: {
-				echoCancellation: true,
-				noiseSuppression: true,
-				autoGainControl: true,
-			},
-			video: false,
-		});
+		// Get microphone access (with WebView fallbacks)
+		localStream = await getMicrophone();
 
 		// Create peer connection with server-provided ICE config
 		const iceConfig = await getIceConfig();

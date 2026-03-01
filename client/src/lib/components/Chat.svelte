@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { activeConversationStore, messagesStore, conversationsStore, addMessage, connectionStore, clearUnread, displayName, nicknamesStore, voiceCallStore, channelVoiceStore } from '$lib/stores';
+	import { activeConversationStore, messagesStore, conversationsStore, addMessage, connectionStore, clearUnread, displayName, nicknamesStore, voiceCallStore, channelVoiceStore, addToast } from '$lib/stores';
 	import type { Message } from '$lib/stores';
 	import MemberList from './MemberList.svelte';
 	import { startCall } from '$lib/voice';
@@ -376,7 +376,16 @@
 				</button>
 			{:else}
 				<button
-					onclick={() => { if (activeConversation) joinVoice(activeConversation.id); }}
+					onclick={async () => {
+						if (!activeConversation) return;
+						try {
+							await joinVoice(activeConversation.id);
+						} catch (e) {
+							const msg = e instanceof Error ? e.message : String(e);
+							console.error('[Chat] joinVoice failed:', msg);
+							addToast('Failed to join voice: ' + msg, 'error');
+						}
+					}}
 					disabled={!$connectionStore.connected || $channelVoiceStore.channelId !== null}
 					class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition hover:bg-surface-light text-text-muted hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
 					title={$channelVoiceStore.channelId !== null ? 'Already in a voice channel' : 'Join voice chat'}

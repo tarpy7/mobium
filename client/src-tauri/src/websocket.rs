@@ -3,8 +3,10 @@
 use anyhow::Result;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::WebSocketStream;
 use tracing::{info, error, debug, warn};
 use tauri::{AppHandle, Emitter, Manager, State};
 use crate::state::AppState;
@@ -112,6 +114,125 @@ impl Connection {
     }
 }
 
+/// Run a WebSocket session over any transport that implements AsyncRead + AsyncWrite.
+/// This is the core session logic shared between direct and Tor connections.
+async fn run_ws_session<S>(
+    ws_stream: WebSocketStream<S>,
+    server_url: String,
+    identity: Arc<mobium_shared::IdentityKey>,
+    state: State<'_, AppState>,
+    app_handle: AppHandle,
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (mut write, mut read) = ws_stream.split();
+    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(100);
+
+    // Wait for the server's auth challenge (random nonce)
+    let auth_nonce = {
+        let challenge_msg = read.next().await
+            .ok_or_else(|| anyhow::anyhow!("Server closed connection before sending auth challenge"))?
+            .map_err(|e| anyhow::anyhow!("WebSocket error waiting for auth challenge: {}", e))?;
+
+        match challenge_msg {
+            Message::Binary(data) => {
+                let msg: serde_json::Value = rmp_serde::from_slice(&data)
+                    .map_err(|e| anyhow::anyhow!("Failed to parse auth challenge: {}", e))?;
+                let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if msg_type != "auth_challenge" {
+                    return Err(anyhow::anyhow!("Expected auth_challenge, got: {}", msg_type));
+                }
+                msg.get("nonce")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
+                    .ok_or_else(|| anyhow::anyhow!("Missing nonce in auth_challenge"))?
+            }
+            _ => return Err(anyhow::anyhow!("Expected binary auth challenge message")),
+        }
+    };
+
+    // Sign "Mobium-auth-v1" || nonce
+    let pubkey = identity.public_signing_key().as_bytes().to_vec();
+    let x25519_pub = identity.public_encryption_key().as_bytes().to_vec();
+    let mut challenge_data = b"Mobium-auth-v1".to_vec();
+    challenge_data.extend_from_slice(&auth_nonce);
+    let signature = identity.sign(&challenge_data).to_bytes().to_vec();
+
+    let auth_msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "auth",
+        "pubkey": pubkey,
+        "x25519_pub": x25519_pub,
+        "signature": signature,
+    }))?;
+
+    write.send(Message::Binary(auth_msg)).await
+        .map_err(|e| anyhow::anyhow!("Failed to send auth: {}", e))?;
+
+    // Spawn write task
+    let _write_task = tauri::async_runtime::spawn(async move {
+        info!("WebSocket write task started");
+        while let Some(data) = rx.recv().await {
+            let len = data.len();
+            match write.send(Message::Binary(data)).await {
+                Ok(_) => {
+                    info!("Write task: sent {} bytes to WebSocket", len);
+                }
+                Err(e) => {
+                    error!("Write task: WebSocket send error: {}", e);
+                    break;
+                }
+            }
+        }
+        info!("WebSocket write task ended");
+    });
+
+    // Spawn read task
+    let app = app_handle.clone();
+    let _read_task = tauri::async_runtime::spawn(async move {
+        while let Some(msg) = read.next().await {
+            match msg {
+                Ok(Message::Binary(data)) => {
+                    if let Err(e) = handle_server_message(&data, &app).await {
+                        error!("Error handling server message: {}", e);
+                    }
+                }
+                Ok(Message::Close(_)) => {
+                    info!("Server closed connection");
+                    let _ = app.emit("connection_lost", ());
+                    break;
+                }
+                Err(e) => {
+                    error!("WebSocket error: {}", e);
+                    let _ = app.emit("connection_lost", ());
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Store connection
+    let connection = Arc::new(Connection {
+        tx,
+        prekey_response_tx: tokio::sync::Mutex::new(None),
+        prekey_response_rx: tokio::sync::Mutex::new(None),
+        ice_config_response_tx: tokio::sync::Mutex::new(None),
+    });
+    let mut conn_guard = state.connection.write().await;
+    *conn_guard = Some(connection);
+
+    // Persist the server URL for auto-reconnect
+    {
+        let mut url_guard = state.last_server_url.write().await;
+        *url_guard = Some(server_url.clone());
+    }
+    let _ = crate::db::set_setting(&state, "last_server_url", &server_url).await;
+
+    info!("WebSocket connection established and authenticated");
+    Ok(())
+}
+
 /// Connect to the server
 pub async fn connect(server_url: String, app_handle: AppHandle, state: State<'_, AppState>) -> Result<()> {
     // Drop any existing connection first so the old write/read tasks shut
@@ -155,119 +276,50 @@ pub async fn connect(server_url: String, app_handle: AppHandle, state: State<'_,
     
     info!("Connecting to {}", ws_url);
     
-    // Connect
+    // Check if Tor mode is enabled
+    #[allow(unused_mut)]
+    let mut use_tor = false;
+    {
+        let tor_state = state.tor_state.read().await;
+        if let Some(ref ts) = *tor_state {
+            use_tor = ts.is_enabled().await;
+        }
+    }
+
+    // Connect — either through Tor or directly.
+    // We connect via Tor in a separate early-return branch to keep types simple.
+    #[cfg(feature = "tor")]
+    if use_tor {
+        info!("Routing connection through Tor...");
+        let tor_state_guard = state.tor_state.read().await;
+        let tor_state_ref = tor_state_guard.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Tor state not initialized"))?;
+
+        let parsed = url::Url::parse(&ws_url)
+            .map_err(|e| anyhow::anyhow!("Invalid URL: {}", e))?;
+        let host = parsed.host_str()
+            .ok_or_else(|| anyhow::anyhow!("No host in URL"))?.to_string();
+        let port = parsed.port_or_known_default()
+            .unwrap_or(if parsed.scheme() == "wss" { 443 } else { 80 });
+
+        let tor_stream = tor_state_ref.connect_tcp(&host, port).await?;
+        // Drop the read lock before the long-lived session
+        drop(tor_state_guard);
+        info!("Tor circuit established, upgrading to WebSocket...");
+
+        let (ws_stream, _) = tokio_tungstenite::client_async(&ws_url, tor_stream).await
+            .map_err(|e| anyhow::anyhow!("WebSocket upgrade over Tor failed: {}", e))?;
+
+        info!("WebSocket connected (via Tor)");
+        return run_ws_session(ws_stream, server_url, identity, state, app_handle).await;
+    }
+
+    // Direct (non-Tor) connection
     let (ws_stream, _) = connect_async(&ws_url).await
         .map_err(|e| anyhow::anyhow!("WebSocket connection failed: {}", e))?;
-    
+
     info!("WebSocket connected");
-    
-    let (mut write, mut read) = ws_stream.split();
-    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(100);
-    
-    // Wait for the server's auth challenge (random nonce)
-    let auth_nonce = {
-        let challenge_msg = read.next().await
-            .ok_or_else(|| anyhow::anyhow!("Server closed connection before sending auth challenge"))?
-            .map_err(|e| anyhow::anyhow!("WebSocket error waiting for auth challenge: {}", e))?;
-        
-        match challenge_msg {
-            Message::Binary(data) => {
-                let msg: serde_json::Value = rmp_serde::from_slice(&data)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse auth challenge: {}", e))?;
-                let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if msg_type != "auth_challenge" {
-                    return Err(anyhow::anyhow!("Expected auth_challenge, got: {}", msg_type));
-                }
-                msg.get("nonce")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
-                    .ok_or_else(|| anyhow::anyhow!("Missing nonce in auth_challenge"))?
-            }
-            _ => return Err(anyhow::anyhow!("Expected binary auth challenge message")),
-        }
-    };
-    
-    // Sign "Mobium-auth-v1" || nonce
-    let pubkey = identity.public_signing_key().as_bytes().to_vec();
-    let x25519_pub = identity.public_encryption_key().as_bytes().to_vec();
-    let mut challenge_data = b"Mobium-auth-v1".to_vec();
-    challenge_data.extend_from_slice(&auth_nonce);
-    let signature = identity.sign(&challenge_data).to_bytes().to_vec();
-    
-    let auth_msg = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "auth",
-        "pubkey": pubkey,
-        "x25519_pub": x25519_pub,
-        "signature": signature,
-    }))?;
-    
-    write.send(Message::Binary(auth_msg)).await
-        .map_err(|e| anyhow::anyhow!("Failed to send auth: {}", e))?;
-    
-    // Spawn write task on Tauri's async runtime
-    let _write_task = tauri::async_runtime::spawn(async move {
-        info!("WebSocket write task started");
-        while let Some(data) = rx.recv().await {
-            let len = data.len();
-            match write.send(Message::Binary(data)).await {
-                Ok(_) => {
-                    info!("Write task: sent {} bytes to WebSocket", len);
-                }
-                Err(e) => {
-                    error!("Write task: WebSocket send error: {}", e);
-                    break;
-                }
-            }
-        }
-        info!("WebSocket write task ended");
-    });
-    
-    // Spawn read task on Tauri's async runtime
-    let app = app_handle.clone();
-    let _read_task = tauri::async_runtime::spawn(async move {
-        while let Some(msg) = read.next().await {
-            match msg {
-                Ok(Message::Binary(data)) => {
-                    if let Err(e) = handle_server_message(&data, &app).await {
-                        error!("Error handling server message: {}", e);
-                    }
-                }
-                Ok(Message::Close(_)) => {
-                    info!("Server closed connection");
-                    let _ = app.emit("connection_lost", ());
-                    break;
-                }
-                Err(e) => {
-                    error!("WebSocket error: {}", e);
-                    let _ = app.emit("connection_lost", ());
-                    break;
-                }
-                _ => {}
-            }
-        }
-    });
-    
-    // Store connection
-    let connection = Arc::new(Connection {
-        tx,
-        prekey_response_tx: tokio::sync::Mutex::new(None),
-        prekey_response_rx: tokio::sync::Mutex::new(None),
-        ice_config_response_tx: tokio::sync::Mutex::new(None),
-    });
-    let mut conn_guard = state.connection.write().await;
-    *conn_guard = Some(connection);
-    
-    // Persist the server URL for auto-reconnect
-    {
-        let mut url_guard = state.last_server_url.write().await;
-        *url_guard = Some(server_url.clone());
-    }
-    // Save to DB (best-effort)
-    let _ = crate::db::set_setting(&state, "last_server_url", &server_url).await;
-    
-    info!("WebSocket connection established and authenticated");
-    
-    Ok(())
+    run_ws_session(ws_stream, server_url, identity, state, app_handle).await
 }
 
 /// Handle messages from the server and emit Tauri events to frontend

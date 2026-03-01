@@ -81,6 +81,10 @@ pub struct AppState {
     pub pending_screen_data: RwLock<Vec<(String, Vec<u8>, u64)>>,
     /// Who is currently sharing their screen in the voice channel (pubkey hex, or None).
     pub screen_sharer: RwLock<Option<String>>,
+
+    // ─── Tor ────────────────────────────────────────────────────────────
+    /// Tor (Arti) client state. Lazily bootstrapped on first use.
+    pub tor_state: RwLock<Option<crate::tor::TorState>>,
 }
 
 impl AppState {

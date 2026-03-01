@@ -1850,3 +1850,47 @@ pub async fn fetch_channel_history(
         Err(e) => Err(format!("Serialization error: {}", e)),
     }
 }
+// ─── Tor Commands ────────────────────────────────────────────────────────
+
+/// Enable or disable Tor mode. When enabled, all future connections
+/// will be routed through the Tor network via Arti.
+#[tauri::command]
+pub async fn set_tor_enabled(
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let mut guard = state.tor_state.write().await;
+    if guard.is_none() {
+        *guard = Some(crate::tor::TorState::default());
+    }
+    let tor = guard.as_ref().unwrap();
+    tor.set_enabled(enabled).await;
+    Ok(enabled)
+}
+
+/// Get current Tor status (enabled + bootstrapped).
+#[tauri::command]
+pub async fn get_tor_status(
+    state: State<'_, AppState>,
+) -> Result<crate::tor::TorStatus, String> {
+    let guard = state.tor_state.read().await;
+    match guard.as_ref() {
+        Some(tor) => Ok(tor.status().await),
+        None => Ok(crate::tor::TorStatus { enabled: false, bootstrapped: false }),
+    }
+}
+
+/// Bootstrap the Tor client immediately (without waiting for a connection).
+/// Returns once the Tor client is ready.
+#[tauri::command]
+pub async fn bootstrap_tor(
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let mut guard = state.tor_state.write().await;
+    if guard.is_none() {
+        *guard = Some(crate::tor::TorState::default());
+    }
+    let tor = guard.as_ref().unwrap();
+    tor.get_client().await.map_err(|e| format!("Tor bootstrap failed: {}", e))?;
+    Ok(true)
+}

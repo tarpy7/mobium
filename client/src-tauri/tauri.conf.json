@@ -35,7 +35,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self' https://tauri.localhost; connect-src 'self' wss://* ws://* https://* http://*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'"
+      "csp": "default-src 'self' https://tauri.localhost; connect-src 'self' wss://* ws://* https://* http://*; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'"
     },
     "windows": [
       {
