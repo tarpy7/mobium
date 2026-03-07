@@ -4,7 +4,7 @@
 
 @layer base {
 	html {
-		@apply bg-slate-900 text-slate-50;
+		@apply bg-background text-text;
 	}
 
 	body {
@@ -14,26 +14,24 @@
 }
 
 @layer utilities {
-	/* Scrollbar styling */
 	::-webkit-scrollbar {
-		width: 8px;
-		height: 8px;
+		width: 6px;
+		height: 6px;
 	}
 
 	::-webkit-scrollbar-track {
-		@apply bg-slate-800;
+		@apply bg-transparent;
 	}
 
 	::-webkit-scrollbar-thumb {
-		@apply bg-slate-700 rounded;
+		@apply bg-surface-light/50 rounded-full;
 	}
 
 	::-webkit-scrollbar-thumb:hover {
-		@apply bg-slate-500;
+		@apply bg-secondary/50;
 	}
 
-	/* Selection styling */
 	::selection {
-		@apply bg-blue-500/30;
+		@apply bg-primary/30;
 	}
 }

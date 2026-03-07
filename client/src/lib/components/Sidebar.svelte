@@ -10,400 +10,400 @@
 
 	let searchQuery = $state('');
 	let showCreateChannel = $state(false);
-	let newChannelName = $state('');
 	let showJoinChannel = $state(false);
-	let joinChannelId = $state('');
-	let joinChannelName = $state('');
-	let copiedChannelId = $state<string | null>(null);
-	let showSettings = $state(false);
 	let showPeople = $state(false);
+	let showSettings = $state(false);
+	let showGroupDm = $state(false);
 	let copiedPubkey = $state(false);
 
-	function truncatePubkey(pk: string | null): string {
-		if (!pk) return 'Unknown';
-		if (pk.length <= 16) return pk;
-		return `${pk.substring(0, 8)}...${pk.substring(pk.length - 8)}`;
-	}
+	// Channel forms
+	let channelName = $state('');
+	let joinChannelId = $state('');
+	let joinChannelName = $state('');
+
+	// Group DM
+	let groupDmName = $state('');
+	let groupDmMembers = $state<string[]>([]);
+	let groupDmInput = $state('');
 
 	async function createChannel() {
-		if (!newChannelName.trim()) return;
+		if (!channelName.trim()) return;
 		try {
-			const channelId = await invoke<string>('create_channel', { channelName: newChannelName.trim() });
-			upsertConversation({
-				id: channelId,
-				name: newChannelName.trim(),
-				type: 'group',
-				unreadCount: 0,
-			});
-			activeConversationStore.set(channelId);
-			newChannelName = '';
+			await invoke('create_channel', { name: channelName.trim() });
+			channelName = '';
 			showCreateChannel = false;
-		} catch (e) {
-			console.error('Failed to create channel:', e);
-		}
+		} catch (e) { console.error('Failed to create channel:', e); }
 	}
 
 	async function joinChannel() {
 		if (!joinChannelId.trim()) return;
-		const name = joinChannelName.trim() || `Channel ${joinChannelId.substring(0, 8)}`;
 		try {
-			await invoke('join_channel', { channelId: joinChannelId.trim(), channelName: name });
-			upsertConversation({
-				id: joinChannelId.trim(),
-				name,
-				type: 'group',
-				unreadCount: 0,
-			});
+			const result = await invoke<{ channel_id: string }>('join_channel', { channelId: joinChannelId.trim() });
+			const displayName = joinChannelName.trim() || joinChannelId.trim().substring(0, 12);
+			upsertConversation({ id: joinChannelId.trim(), name: displayName, type: 'group', unreadCount: 0 });
 			activeConversationStore.set(joinChannelId.trim());
 			joinChannelId = '';
 			joinChannelName = '';
 			showJoinChannel = false;
-		} catch (e) {
-			console.error('Failed to join channel:', e);
+		} catch (e) { console.error('Failed to join channel:', e); }
+	}
+
+	function createGroupDm() {
+		if (!groupDmName.trim() || groupDmMembers.length < 2) return;
+		// Create a local group DM conversation
+		// Group ID = hash of sorted member pubkeys
+		const sorted = [...groupDmMembers].sort().join(':');
+		const groupId = `gdm_${sorted.substring(0, 32)}`;
+		upsertConversation({
+			id: groupId,
+			name: groupDmName.trim(),
+			type: 'group_dm',
+			unreadCount: 0,
+		});
+		activeConversationStore.set(groupId);
+		groupDmName = '';
+		groupDmMembers = [];
+		showGroupDm = false;
+	}
+
+	function addGroupDmMember() {
+		const pk = groupDmInput.trim();
+		if (pk && !groupDmMembers.includes(pk)) {
+			groupDmMembers = [...groupDmMembers, pk];
 		}
+		groupDmInput = '';
+	}
+
+	function removeGroupDmMember(pk: string) {
+		groupDmMembers = groupDmMembers.filter(m => m !== pk);
+	}
+
+	function truncatePubkey(pk: string | null): string {
+		if (!pk) return '';
+		if (pk.length <= 12) return pk;
+		return `${pk.substring(0, 6)}…${pk.substring(pk.length - 6)}`;
 	}
 
 	function formatTime(timestamp: number): string {
 		const date = new Date(timestamp);
 		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-		const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-		if (days === 0) {
-			return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-		} else if (days === 1) {
-			return 'Yesterday';
-		} else if (days < 7) {
-			return date.toLocaleDateString([], { weekday: 'short' });
-		} else {
-			return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-		}
+		const days = Math.floor((now.getTime() - date.getTime()) / (86400000));
+		if (days === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+		if (days === 1) return 'Yesterday';
+		if (days < 7) return date.toLocaleDateString([], { weekday: 'short' });
+		return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 	}
 
 	function selectConversation(id: string) {
 		activeConversationStore.set(id);
+		clearUnread(id);
 	}
 
+	function clearUnread(id: string) {
+		conversationsStore.update(convos =>
+			convos.map(c => c.id === id ? { ...c, unreadCount: 0 } : c)
+		);
+	}
+
+	function closeAllPanels() {
+		showCreateChannel = false;
+		showJoinChannel = false;
+		showPeople = false;
+		showSettings = false;
+		showGroupDm = false;
+	}
+
+	// Derived
 	const filteredConversations = $derived(
 		$conversationsStore
 			.filter(c => {
-				// Text search filter
-				if (searchQuery && !c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-				// Type filter
-				if ($sidebarFilterStore === 'dms') return c.type === 'dm';
+				if ($sidebarFilterStore === 'dms') return c.type === 'dm' || c.type === 'group_dm';
 				if ($sidebarFilterStore === 'channels') return c.type === 'group';
 				return true;
 			})
-			.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
+			.filter(c => {
+				if (!searchQuery) return true;
+				return c.name.toLowerCase().includes(searchQuery.toLowerCase());
+			})
+			.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
 	);
 
-	const dmCount = $derived($conversationsStore.filter(c => c.type === 'dm').length);
-	const dmUnreadCount = $derived($conversationsStore.filter(c => c.type === 'dm').reduce((sum, c) => sum + c.unreadCount, 0));
+	const totalUnread = $derived($conversationsStore.reduce((s, c) => s + c.unreadCount, 0));
 </script>
 
-<div class="flex h-full w-80 flex-col border-r border-surface-light bg-surface">
+<div class="flex h-full w-72 flex-col border-r border-surface-light/30 bg-surface">
+
 	<!-- Header -->
-	<div class="border-b border-surface-light p-4">
-		<div class="mb-4 flex items-center justify-between">
-			<h1 class="text-xl font-bold text-text">Mobium</h1>
-			<div class="flex items-center gap-2">
-				{#if $connectionStore.connected}
-					<div class="h-2 w-2 rounded-full bg-success" title="Connected"></div>
-				{:else}
-					<div class="h-2 w-2 rounded-full bg-danger" title="Disconnected"></div>
-				{/if}
-			</div>
+	<div class="flex items-center justify-between px-4 py-3 border-b border-surface-light/20">
+		<div class="flex items-center gap-2">
+			<span class="text-lg font-bold text-primary">Mobium</span>
+			<span class="flex h-2 w-2 rounded-full {$connectionStore.connected ? 'bg-accent' : 'bg-danger'}"></span>
 		</div>
-
-		<!-- Search -->
-		<div class="relative">
-			<input
-				type="text"
-				bind:value={searchQuery}
-				placeholder="Search conversations..."
-				class="w-full rounded-lg bg-background px-4 py-2 pr-10 text-sm text-text placeholder-text-muted/50 outline-none ring-1 ring-surface-light focus:ring-primary"
-			/>
-			<svg class="absolute right-3 top-2.5 h-4 w-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+		<button
+			onclick={() => dispatch('connect')}
+			class="rounded-lg p-1.5 text-text-muted hover:text-primary hover:bg-surface-light/50 transition"
+			title={$connectionStore.connected ? 'Connected' : 'Connect to server'}
+		>
+			<!-- Server/connection icon -->
+			<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
 			</svg>
-		</div>
-
-		<!-- Filter tabs -->
-		<div class="mt-3 flex gap-1">
-			<button
-				onclick={() => sidebarFilterStore.set('all')}
-				class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition {$sidebarFilterStore === 'all' ? 'bg-primary text-white' : 'bg-background text-text-muted hover:text-text'}"
-			>
-				All
-			</button>
-			<button
-				onclick={() => sidebarFilterStore.set('dms')}
-				class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition flex items-center justify-center gap-1 {$sidebarFilterStore === 'dms' ? 'bg-primary text-white' : 'bg-background text-text-muted hover:text-text'}"
-			>
-				DMs
-				{#if dmUnreadCount > 0}
-					<span class="rounded-full bg-danger px-1.5 py-0 text-[10px] text-white leading-4">{dmUnreadCount}</span>
-				{/if}
-			</button>
-			<button
-				onclick={() => sidebarFilterStore.set('channels')}
-				class="flex-1 rounded-md px-2 py-1 text-xs font-medium transition {$sidebarFilterStore === 'channels' ? 'bg-primary text-white' : 'bg-background text-text-muted hover:text-text'}"
-			>
-				Channels
-			</button>
-		</div>
+		</button>
 	</div>
 
-	<!-- Conversations List -->
+	<!-- Filter tabs -->
+	<div class="flex px-3 py-2 gap-1 border-b border-surface-light/10">
+		{#each [['all', 'All'], ['dms', 'DMs'], ['channels', 'Channels']] as [key, label]}
+			<button
+				onclick={() => sidebarFilterStore.set(key as SidebarFilter)}
+				class="flex-1 rounded-lg px-2 py-1 text-xs font-medium transition {$sidebarFilterStore === key ? 'bg-primary/20 text-primary' : 'text-text-muted hover:text-text hover:bg-surface-light/30'}"
+			>
+				{label}
+			</button>
+		{/each}
+	</div>
+
+	<!-- Search -->
+	<div class="px-3 py-2">
+		<input
+			type="text"
+			bind:value={searchQuery}
+			placeholder="Search…"
+			class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50"
+		/>
+	</div>
+
+	<!-- Conversations -->
 	<div class="flex-1 overflow-y-auto">
 		{#if filteredConversations.length === 0}
-			<div class="p-4 text-center text-text-muted">
-				{#if searchQuery}
-					No conversations found
-				{:else if $sidebarFilterStore === 'dms'}
-					<div class="py-8">
-						<div class="mb-2 text-3xl opacity-20">💬</div>
-						<div class="text-sm">No direct messages yet</div>
-						<div class="mt-1 text-xs">Use the People button to start a DM</div>
-					</div>
-				{:else if $sidebarFilterStore === 'channels'}
-					<div class="py-8">
-						<div class="mb-2 text-3xl opacity-20">📢</div>
-						<div class="text-sm">No channels yet</div>
-						<div class="mt-1 text-xs">Create or join a channel below</div>
-					</div>
-				{:else}
-					<div class="py-8">
-						<div class="mb-2 text-4xl opacity-20">👋</div>
-						<div class="text-sm">No conversations yet</div>
-						{#if !$connectionStore.connected}
-							<button
-								onclick={() => dispatch('connect')}
-								class="mt-4 text-primary hover:underline"
-							>
-								Connect to server
-							</button>
+			<div class="p-6 text-center text-xs text-text-muted/60">
+				No conversations yet
+			</div>
+		{/if}
+
+		{#each filteredConversations as conversation}
+			<button
+				onclick={() => selectConversation(conversation.id)}
+				class="group w-full px-3 py-2.5 text-left transition hover:bg-surface-light/30 {$activeConversationStore === conversation.id ? 'bg-surface-light/40' : ''}"
+			>
+				<div class="flex items-center gap-2.5">
+					<!-- Icon -->
+					<div class="flex h-8 w-8 items-center justify-center rounded-full text-sm flex-shrink-0 {conversation.type === 'dm' ? 'bg-primary/15 text-primary/80' : conversation.type === 'group_dm' ? 'bg-secondary/20 text-secondary' : 'bg-accent/15 text-accent/80'}">
+						{#if conversation.type === 'dm'}
+							<!-- User icon -->
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+							</svg>
+						{:else if conversation.type === 'group_dm'}
+							<!-- Group DM icon -->
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+							</svg>
+						{:else}
+							<!-- Channel icon -->
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+							</svg>
 						{/if}
 					</div>
-				{/if}
-			</div>
-		{:else}
-			{#each filteredConversations as conversation}
-				<div
-					role="button"
-					tabindex="0"
-					onclick={() => selectConversation(conversation.id)}
-					onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && selectConversation(conversation.id)}
-					class="group w-full border-b border-surface-light p-4 text-left transition hover:bg-surface-light cursor-pointer {$activeConversationStore === conversation.id ? 'bg-surface-light' : ''}"
-				>
-					<div class="flex items-start justify-between">
-						<div class="flex items-center gap-3">
-							<div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 text-lg">
-								{conversation.type === 'dm' ? '👤' : '👥'}
-							</div>
-							<div class="flex-1 min-w-0">
-								<div class="flex items-center gap-2">
-									<span class="font-semibold text-text truncate">{conversation.name}</span>
-									{#if conversation.unreadCount > 0}
-										<span class="rounded-full bg-primary px-2 py-0.5 text-xs text-white flex-shrink-0">
-											{conversation.unreadCount}
-										</span>
-									{/if}
-								</div>
-								{#if conversation.lastMessage}
-									<div class="mt-1 truncate text-sm text-text-muted">
-										{conversation.lastMessage}
-									</div>
-								{/if}
-							</div>
-						</div>
-						<div class="flex flex-col items-end gap-1 flex-shrink-0">
+
+					<!-- Name + preview -->
+					<div class="min-w-0 flex-1">
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-medium text-text truncate">{conversation.name}</span>
 							{#if conversation.lastMessageAt}
-								<span class="text-xs text-text-muted">
-									{formatTime(conversation.lastMessageAt)}
-								</span>
+								<span class="text-xs text-text-muted/50 flex-shrink-0 ml-2">{formatTime(conversation.lastMessageAt)}</span>
 							{/if}
-							<button
-								onclick={(e: MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(conversation.id); copiedChannelId = conversation.id; setTimeout(() => copiedChannelId = null, 1500); }}
-								class="text-xs text-text-muted/50 hover:text-primary transition opacity-0 group-hover:opacity-100"
-								title="Copy channel ID"
-							>
-								{copiedChannelId === conversation.id ? 'Copied' : 'ID'}
-							</button>
 						</div>
+						{#if conversation.lastMessage}
+							<div class="text-xs text-text-muted/60 truncate">{conversation.lastMessage}</div>
+						{/if}
 					</div>
+
+					<!-- Unread badge -->
+					{#if conversation.unreadCount > 0}
+						<span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-white flex-shrink-0">
+							{conversation.unreadCount}
+						</span>
+					{/if}
 				</div>
-			{/each}
-		{/if}
+			</button>
+		{/each}
 	</div>
-
-	<!-- Channel Actions -->
-	{#if showCreateChannel}
-		<div class="border-t border-surface-light p-3">
-			<div class="text-xs font-semibold text-text-muted mb-2">Create Channel</div>
-			<input
-				type="text"
-				bind:value={newChannelName}
-				placeholder="Channel name..."
-				class="w-full rounded-lg bg-background px-3 py-2 text-sm text-text placeholder-text-muted/50 outline-none ring-1 ring-surface-light focus:ring-primary mb-2"
-				onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && createChannel()}
-			/>
-			<div class="flex gap-2">
-				<button onclick={createChannel} class="flex-1 rounded-lg bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary-dark">Create</button>
-				<button onclick={() => { showCreateChannel = false; }} class="flex-1 rounded-lg bg-surface-light px-3 py-1.5 text-xs text-text-muted hover:text-text">Cancel</button>
-			</div>
-		</div>
-	{/if}
-
-	{#if showJoinChannel}
-		<div class="border-t border-surface-light p-3">
-			<div class="text-xs font-semibold text-text-muted mb-2">Join Channel</div>
-			<input
-				type="text"
-				bind:value={joinChannelId}
-				placeholder="Channel ID (hex)..."
-				class="w-full rounded-lg bg-background px-3 py-2 text-sm text-text placeholder-text-muted/50 outline-none ring-1 ring-surface-light focus:ring-primary mb-2"
-			/>
-			<input
-				type="text"
-				bind:value={joinChannelName}
-				placeholder="Display name (optional)..."
-				class="w-full rounded-lg bg-background px-3 py-2 text-sm text-text placeholder-text-muted/50 outline-none ring-1 ring-surface-light focus:ring-primary mb-2"
-				onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && joinChannel()}
-			/>
-			<div class="flex gap-2">
-				<button onclick={joinChannel} class="flex-1 rounded-lg bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary-dark">Join</button>
-				<button onclick={() => { showJoinChannel = false; }} class="flex-1 rounded-lg bg-surface-light px-3 py-1.5 text-xs text-text-muted hover:text-text">Cancel</button>
-			</div>
-		</div>
-	{/if}
 
 	<!-- People Panel -->
 	{#if showPeople}
-		<div class="border-t border-surface-light max-h-80 overflow-hidden flex flex-col">
+		<div class="absolute inset-0 z-20 w-72 bg-surface border-r border-surface-light/30">
 			<UserList onclose={() => { showPeople = false; }} />
 		</div>
 	{/if}
 
-	<!-- Settings Panel (slides up from footer) -->
-	{#if showSettings}
-		<div class="border-t border-surface-light p-3 bg-surface-light/50">
-			<div class="text-xs font-semibold text-text-muted mb-2">Your Identity</div>
-			<div class="flex items-center gap-2 mb-3">
-				<code class="flex-1 text-xs text-text bg-background rounded px-2 py-1 truncate" title={$identityStore.pubkey || ''}>
-					{truncatePubkey($identityStore.pubkey)}
-				</code>
-				<button
-					onclick={() => {
-						if ($identityStore.pubkey) {
-							navigator.clipboard.writeText($identityStore.pubkey);
-							copiedPubkey = true;
-							setTimeout(() => copiedPubkey = false, 1500);
-						}
-					}}
-					class="text-xs text-text-muted hover:text-primary transition flex-shrink-0"
-					title="Copy public key"
-				>
-					{copiedPubkey ? 'Copied!' : 'Copy'}
+	<!-- Create Channel Panel -->
+	{#if showCreateChannel}
+		<div class="border-t border-surface-light/20 p-3 bg-surface-light/20">
+			<div class="flex items-center justify-between mb-2">
+				<span class="text-xs font-semibold text-text">New Channel</span>
+				<button onclick={() => showCreateChannel = false} class="text-text-muted hover:text-text p-0.5">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
 				</button>
 			</div>
-			<!-- Content Filter Toggle -->
-			<div class="flex items-center justify-between mb-3">
-				<div>
-					<div class="text-xs font-semibold text-text">Content Filter</div>
-					<div class="text-xs text-text-muted">Block explicit images & videos</div>
-				</div>
-				<button
-					onclick={() => { nsfwFilterEnabled.update(v => !v); }}
-					class="relative w-10 h-5 rounded-full transition {$nsfwFilterEnabled ? 'bg-success' : 'bg-surface-light'}"
-					title={$nsfwFilterEnabled ? 'Content filter enabled' : 'Content filter disabled'}
-				>
-					<span class="absolute top-0.5 {$nsfwFilterEnabled ? 'left-5' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
-				</button>
-			</div>
+			<input type="text" bind:value={channelName} placeholder="Channel name" onkeydown={(e) => e.key === 'Enter' && createChannel()}
+				class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-2" />
+			<button onclick={createChannel} class="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark transition">Create</button>
+		</div>
+	{/if}
 
-			<button
-				onclick={async () => {
-					try {
-						await invoke('lock_profile');
-						showSettings = false;
-						dispatch('locked');
-					} catch (e) {
-						console.error('Failed to lock profile:', e);
-					}
-				}}
-				class="w-full rounded-lg bg-danger/20 px-3 py-1.5 text-xs text-danger hover:bg-danger/30 mb-2"
-			>
-				🔒 Lock Profile
-			</button>
-			<button
-				onclick={() => { showSettings = false; }}
-				class="w-full rounded-lg bg-surface-light px-3 py-1.5 text-xs text-text-muted hover:text-text"
-			>
-				Close
+	<!-- Join Channel Panel -->
+	{#if showJoinChannel}
+		<div class="border-t border-surface-light/20 p-3 bg-surface-light/20">
+			<div class="flex items-center justify-between mb-2">
+				<span class="text-xs font-semibold text-text">Join Channel</span>
+				<button onclick={() => showJoinChannel = false} class="text-text-muted hover:text-text p-0.5">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+				</button>
+			</div>
+			<input type="text" bind:value={joinChannelId} placeholder="Channel ID" class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-1.5" />
+			<input type="text" bind:value={joinChannelName} placeholder="Display name (optional)" class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-2" />
+			<button onclick={joinChannel} class="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark transition">Join</button>
+		</div>
+	{/if}
+
+	<!-- Group DM Panel -->
+	{#if showGroupDm}
+		<div class="border-t border-surface-light/20 p-3 bg-surface-light/20">
+			<div class="flex items-center justify-between mb-2">
+				<span class="text-xs font-semibold text-text">New Group Chat</span>
+				<button onclick={() => showGroupDm = false} class="text-text-muted hover:text-text p-0.5">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+				</button>
+			</div>
+			<input type="text" bind:value={groupDmName} placeholder="Group name"
+				class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-1.5" />
+			<div class="flex gap-1 mb-1.5">
+				<input type="text" bind:value={groupDmInput} placeholder="Add member pubkey"
+					onkeydown={(e) => e.key === 'Enter' && addGroupDmMember()}
+					class="flex-1 rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50" />
+				<button onclick={addGroupDmMember} class="rounded-lg bg-accent/20 px-2 text-xs text-accent hover:bg-accent/30 transition">+</button>
+			</div>
+			{#if groupDmMembers.length > 0}
+				<div class="mb-2 flex flex-wrap gap-1">
+					{#each groupDmMembers as member}
+						<span class="flex items-center gap-1 rounded-full bg-secondary/15 px-2 py-0.5 text-xs text-secondary">
+							{truncatePubkey(member)}
+							<button onclick={() => removeGroupDmMember(member)} class="hover:text-danger">×</button>
+						</span>
+					{/each}
+				</div>
+			{/if}
+			<button onclick={createGroupDm} disabled={groupDmMembers.length < 2 || !groupDmName.trim()}
+				class="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark transition disabled:opacity-40">
+				Create Group ({groupDmMembers.length} members)
 			</button>
 		</div>
 	{/if}
 
-	<!-- Footer -->
-	<div class="border-t border-surface-light p-4">
-		<div class="flex items-center justify-between">
-			<button
-				onclick={() => dispatch('connect')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-muted transition hover:bg-surface-light hover:text-text"
-			>
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-				</svg>
-				{#if $connectionStore.connected}
-					Connected
-				{:else}
-					Connect
-				{/if}
-			</button>
-
-		<div class="flex items-center gap-1">
-			<button
-				onclick={() => { showPeople = !showPeople; showCreateChannel = false; showJoinChannel = false; showSettings = false; }}
-				class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition hover:bg-surface-light {showPeople ? 'text-primary bg-surface-light' : 'text-text-muted hover:text-text'}"
-				title="People"
-			>
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-				</svg>
-				People
-			</button>
-			<button
-				onclick={() => { showCreateChannel = !showCreateChannel; showJoinChannel = false; showPeople = false; showSettings = false; }}
-				class="flex items-center justify-center rounded-lg p-2 text-sm text-text-muted transition hover:bg-surface-light hover:text-text"
-				title="Create Channel"
-				disabled={!$connectionStore.connected}
-			>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-					</svg>
-				</button>
-			<button
-				onclick={() => { showJoinChannel = !showJoinChannel; showCreateChannel = false; showPeople = false; showSettings = false; }}
-				class="flex items-center justify-center rounded-lg p-2 text-sm text-text-muted transition hover:bg-surface-light hover:text-text"
-				title="Join Channel"
-				disabled={!$connectionStore.connected}
-			>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-					</svg>
-				</button>
-			<button
-				onclick={() => { showSettings = !showSettings; showCreateChannel = false; showJoinChannel = false; showPeople = false; }}
-				class="flex items-center justify-center rounded-lg p-2 text-sm text-text-muted transition hover:bg-surface-light hover:text-text"
-				title="Settings"
-			>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-					</svg>
+	<!-- Settings Panel -->
+	{#if showSettings}
+		<div class="border-t border-surface-light/20 p-3 bg-surface-light/20">
+			<div class="flex items-center justify-between mb-2">
+				<span class="text-xs font-semibold text-text">Settings</span>
+				<button onclick={() => showSettings = false} class="text-text-muted hover:text-text p-0.5">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
 				</button>
 			</div>
+
+			<!-- Pubkey -->
+			<div class="flex items-center gap-1.5 mb-3">
+				<code class="flex-1 text-xs text-text bg-background/50 rounded px-2 py-1 truncate" title={$identityStore.pubkey || ''}>
+					{truncatePubkey($identityStore.pubkey)}
+				</code>
+				<button onclick={() => {
+					if ($identityStore.pubkey) {
+						navigator.clipboard.writeText($identityStore.pubkey);
+						copiedPubkey = true;
+						setTimeout(() => copiedPubkey = false, 1500);
+					}
+				}} class="text-xs text-text-muted hover:text-primary transition">
+					{copiedPubkey ? '✓' : 'Copy'}
+				</button>
+			</div>
+
+			<!-- Content Filter -->
+			<div class="flex items-center justify-between mb-3">
+				<div>
+					<div class="text-xs font-medium text-text">Content Filter</div>
+					<div class="text-xs text-text-muted/60">Block explicit media</div>
+				</div>
+				<button onclick={() => { nsfwFilterEnabled.update(v => !v); }}
+					class="relative w-9 h-5 rounded-full transition {$nsfwFilterEnabled ? 'bg-accent' : 'bg-surface-light'}">
+					<span class="absolute top-0.5 {$nsfwFilterEnabled ? 'left-4' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+				</button>
+			</div>
+
+			<!-- Lock -->
+			<button onclick={async () => {
+				try { await invoke('lock_profile'); showSettings = false; dispatch('locked'); }
+				catch (e) { console.error('Failed to lock:', e); }
+			}} class="w-full rounded-lg bg-danger/15 border border-danger/20 px-3 py-1.5 text-xs text-danger hover:bg-danger/25 transition flex items-center justify-center gap-1.5">
+				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+				</svg>
+				Lock Profile
+			</button>
 		</div>
+	{/if}
+
+	<!-- Action bar -->
+	<div class="flex items-center justify-around border-t border-surface-light/20 px-2 py-2">
+		<button onclick={() => { closeAllPanels(); showPeople = !showPeople; }}
+			class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition {showPeople ? 'text-primary' : 'text-text-muted hover:text-text'}"
+			title="People">
+			<!-- People icon -->
+			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+			</svg>
+			<span class="text-[10px]">People</span>
+		</button>
+
+		<button onclick={() => { closeAllPanels(); showGroupDm = !showGroupDm; }}
+			class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition {showGroupDm ? 'text-primary' : 'text-text-muted hover:text-text'}"
+			title="New Group Chat">
+			<!-- Group chat icon -->
+			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+			</svg>
+			<span class="text-[10px]">Group</span>
+		</button>
+
+		<button onclick={() => { closeAllPanels(); showCreateChannel = !showCreateChannel; }}
+			class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition {showCreateChannel ? 'text-primary' : 'text-text-muted hover:text-text'}"
+			title="New Channel">
+			<!-- Hash/channel icon -->
+			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4" />
+			</svg>
+			<span class="text-[10px]">Channel</span>
+		</button>
+
+		<button onclick={() => { closeAllPanels(); showJoinChannel = !showJoinChannel; }}
+			class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition {showJoinChannel ? 'text-primary' : 'text-text-muted hover:text-text'}"
+			title="Join Channel">
+			<!-- Login/join icon -->
+			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+			</svg>
+			<span class="text-[10px]">Join</span>
+		</button>
+
+		<button onclick={() => { closeAllPanels(); showSettings = !showSettings; }}
+			class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition {showSettings ? 'text-primary' : 'text-text-muted hover:text-text'}"
+			title="Settings">
+			<!-- Gear icon -->
+			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+			</svg>
+			<span class="text-[10px]">Settings</span>
+		</button>
 	</div>
 </div>

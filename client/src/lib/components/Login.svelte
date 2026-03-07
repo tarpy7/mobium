@@ -11,14 +11,9 @@
 	let isResetting = $state(false);
 
 	async function unlock() {
-		if (!password) {
-			error = 'Please enter your password';
-			return;
-		}
-
+		if (!password) { error = 'Please enter your password'; return; }
 		isLoading = true;
 		error = null;
-
 		try {
 			await invoke('unlock_identity', { password });
 			dispatch('unlocked');
@@ -32,7 +27,6 @@
 	async function resetIdentity() {
 		isResetting = true;
 		error = null;
-
 		try {
 			await invoke('reset_identity');
 			dispatch('reset');
@@ -45,104 +39,65 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
-			unlock();
-		}
+		if (event.key === 'Enter') unlock();
 	}
 </script>
 
-<div class="flex h-full items-center justify-center bg-background p-8">
-	<div class="w-full max-w-md rounded-xl bg-surface p-8 shadow-2xl">
-		<div class="text-center mb-8">
-			<div class="mb-2 text-4xl font-bold text-primary">Mobium</div>
-			<div class="text-text-muted">Welcome back</div>
+<div class="flex h-full items-center justify-center p-8">
+	<div class="w-full max-w-sm rounded-2xl bg-surface p-8 shadow-2xl border border-surface-light/30">
+		<div class="text-center mb-6">
+			<div class="mb-1 text-3xl font-bold text-primary">Mobium</div>
+			<div class="text-sm text-text-muted">Welcome back</div>
 		</div>
 
 		{#if error}
-			<div class="mb-4 rounded-lg bg-danger/20 p-3 text-danger text-sm">
-				{error}
-			</div>
+			<div class="mb-4 rounded-lg bg-danger/15 border border-danger/30 p-3 text-sm text-danger">{error}</div>
 		{/if}
 
 		{#if showResetConfirm}
-			<div class="mb-4 rounded-lg bg-warning/10 p-4">
-				<div class="mb-2 font-semibold text-warning">Reset Identity?</div>
-				<p class="text-sm text-text-muted mb-4">
-					This will permanently delete your identity and all local data.
-					You will need your recovery phrase to restore your account, or
-					you can create a new identity.
-				</p>
+			<div class="mb-4 rounded-lg bg-warning/10 border border-warning/30 p-3">
+				<div class="mb-1 font-semibold text-warning text-sm">Reset Identity?</div>
+				<p class="text-xs text-text-muted mb-3">This permanently deletes your identity and all local data.</p>
 				<div class="flex gap-2">
-					<button
-						onclick={resetIdentity}
-						disabled={isResetting}
-						class="flex-1 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-					>
-						{#if isResetting}
-							Resetting...
-						{:else}
-							Yes, Delete Everything
-						{/if}
+					<button onclick={resetIdentity} disabled={isResetting}
+						class="flex-1 rounded-lg bg-danger px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+						{isResetting ? 'Resetting...' : 'Delete Everything'}
 					</button>
-					<button
-						onclick={() => { showResetConfirm = false; }}
-						disabled={isResetting}
-						class="flex-1 rounded-lg bg-surface-light px-4 py-2 text-sm text-text-muted transition hover:text-text disabled:opacity-50"
-					>
+					<button onclick={() => { showResetConfirm = false; }} disabled={isResetting}
+						class="flex-1 rounded-lg bg-surface-light px-3 py-2 text-xs text-text-muted transition hover:text-text disabled:opacity-50">
 						Cancel
 					</button>
 				</div>
 			</div>
 		{/if}
 
-		<div class="space-y-4">
-			<div>
-				<label class="mb-2 block text-sm text-text-muted" for="unlock-password">Password</label>
-				<input
-					id="unlock-password"
-					type="password"
-					bind:value={password}
-					onkeydown={handleKeydown}
-					placeholder="Enter your password to unlock"
-					disabled={isLoading}
-					class="w-full rounded-lg bg-background px-4 py-3 text-text placeholder-text-muted/50 outline-none ring-1 ring-surface-light focus:ring-primary disabled:opacity-50"
-				/>
-			</div>
-
-			<button
-				onclick={unlock}
-				disabled={isLoading || !password}
-				class="w-full rounded-lg bg-primary px-6 py-3 font-semibold text-white transition hover:bg-primary-dark disabled:opacity-50"
-			>
-				{#if isLoading}
-					Unlocking...
-				{:else}
-					Unlock
-				{/if}
+		<div class="space-y-3">
+			<input
+				type="password"
+				bind:value={password}
+				onkeydown={handleKeydown}
+				placeholder="Enter password"
+				disabled={isLoading}
+				class="w-full rounded-xl bg-background px-4 py-3 text-sm text-text placeholder-text-muted/50 outline-none ring-1 ring-surface-light focus:ring-primary disabled:opacity-50"
+			/>
+			<button onclick={unlock} disabled={isLoading || !password}
+				class="w-full rounded-xl bg-primary px-6 py-3 font-semibold text-white transition hover:bg-primary-dark disabled:opacity-50 flex items-center justify-center gap-2">
+				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+				</svg>
+				{isLoading ? 'Unlocking...' : 'Unlock'}
 			</button>
 		</div>
 
-		<div class="mt-6 text-center space-y-2">
-			<p class="text-xs text-text-muted">
-				Your identity is encrypted and stored locally.
-				Enter your password to decrypt it.
-			</p>
-			<div class="flex justify-center gap-4">
-				{#if !showResetConfirm}
-					<button
-						onclick={() => { showResetConfirm = true; }}
-						class="text-xs text-text-muted hover:text-danger transition"
-					>
-						Forgot password? Reset identity
-					</button>
-				{/if}
-				<button
-					onclick={() => dispatch('switchProfile')}
-					class="text-xs text-text-muted hover:text-primary transition"
-				>
-					Switch Profile
+		<div class="mt-5 text-center flex justify-center gap-4">
+			{#if !showResetConfirm}
+				<button onclick={() => { showResetConfirm = true; }} class="text-xs text-text-muted hover:text-danger transition">
+					Reset identity
 				</button>
-			</div>
+			{/if}
+			<button onclick={() => dispatch('switchProfile')} class="text-xs text-text-muted hover:text-primary transition">
+				Switch profile
+			</button>
 		</div>
 	</div>
 </div>

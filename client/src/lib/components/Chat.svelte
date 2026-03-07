@@ -278,16 +278,33 @@
 		</div>
 		<div class="flex items-center gap-2">
 		{#if activeConversation?.type === 'dm'}
+			<!-- DM voice call -->
 			<button
 				onclick={() => { if (activeConversation) startCall(activeConversation.id); }}
 				disabled={!$connectionStore.connected || $voiceCallStore.state !== 'idle'}
-				class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition hover:bg-surface-light text-text-muted hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
-				title={$voiceCallStore.state !== 'idle' ? 'Already in a call' : 'Start voice call'}
+				class="rounded-lg p-1.5 transition hover:bg-surface-light text-text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+				title="Voice call"
 			>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
 				</svg>
-				Call
+			</button>
+		{:else if activeConversation?.type === 'group_dm'}
+			<!-- Group DM meeting call -->
+			<button
+				onclick={async () => {
+					if (!activeConversation) return;
+					try { await joinVoice(activeConversation.id); }
+					catch (e) { addToast('Failed to start group call: ' + (e instanceof Error ? e.message : String(e)), 'error'); }
+				}}
+				disabled={!$connectionStore.connected || $channelVoiceStore.channelId !== null}
+				class="rounded-lg p-1.5 transition hover:bg-surface-light text-text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+				title="Group call"
+			>
+				<!-- Video/meeting icon -->
+				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+				</svg>
 			</button>
 		{/if}
 		{#if activeConversation?.type === 'group'}

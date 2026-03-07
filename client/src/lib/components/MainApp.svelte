@@ -71,29 +71,17 @@
 			<Chat />
 		{:else}
 			<div class="flex h-full items-center justify-center">
-				<div class="text-center text-text-muted">
-					<div class="mb-4 text-6xl opacity-20">💬</div>
-					<div class="text-lg">Select a conversation to start messaging</div>
-					<div class="mt-4 flex items-center justify-center gap-3">
-						<button
-							onclick={() => sidebarFilterStore.set('dms')}
-							class="flex items-center gap-1.5 rounded-lg bg-surface px-4 py-2 text-sm text-text-muted hover:text-text hover:bg-surface-light transition border border-surface-light"
-						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-							</svg>
-							Direct Messages
-						</button>
+				<div class="text-center">
+					<div class="mb-3 text-4xl opacity-15">✦</div>
+					<div class="text-sm text-text-muted/70">Select a conversation</div>
+					{#if !$connectionStore.connected}
 						<button
 							onclick={toggleConnectionModal}
-							class="flex items-center gap-1.5 rounded-lg bg-surface px-4 py-2 text-sm text-text-muted hover:text-text hover:bg-surface-light transition border border-surface-light"
+							class="mt-4 rounded-xl bg-primary/15 border border-primary/20 px-5 py-2 text-xs text-primary hover:bg-primary/25 transition"
 						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-							</svg>
-							Connect to Server
+							Connect to server
 						</button>
-					</div>
+					{/if}
 				</div>
 			</div>
 		{/if}

@@ -17,7 +17,7 @@ export const connectionStore = writable<ConnectionStatus>({
 export interface Conversation {
 	id: string;
 	name: string;
-	type: 'dm' | 'group';
+	type: 'dm' | 'group' | 'group_dm';
 	lastMessage?: string;
 	lastMessageAt?: number;
 	unreadCount: number;
