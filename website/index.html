@@ -5,25 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mobium — Encrypted Communication</title>
     <meta name="description" content="Zero-knowledge encrypted messaging, voice, and file sharing. The server is blind by design. Self-host or connect to a managed instance.">
-    <meta name="theme-color" content="#6c5ce7">
-    <!-- OG -->
+    <meta name="theme-color" content="#e07a5f">
     <meta property="og:title" content="Mobium — Communication that stays yours">
-    <meta property="og:description" content="End-to-end encrypted messaging. Zero-knowledge server. Zero-knowledge server. Self-hostable on a Raspberry Pi.">
+    <meta property="og:description" content="End-to-end encrypted messaging. Zero-knowledge server. Self-hostable on a Raspberry Pi.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="http://107.130.61.253">
-    <!-- Favicon (inline SVG) -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
     <style>
         :root {
-            --bg: #0a0a0f;
-            --bg2: #12121a;
-            --accent: #6c5ce7;
-            --accent2: #a29bfe;
-            --text: #e0e0e8;
-            --muted: #6c6c80;
-            --green: #00e676;
-            --border: #1e1e2e;
-            --danger: #ff4757;
+            --bg: #1a1625;
+            --bg2: #2a2435;
+            --accent: #e07a5f;
+            --accent2: #f2a68d;
+            --sage: #81b29a;
+            --sage-light: #a8d5ba;
+            --lavender: #b8a9c9;
+            --sand: #f2cc8f;
+            --text: #f4f0f7;
+            --muted: #9b8fb0;
+            --border: #3d3548;
+            --danger: #e07a7a;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -34,18 +35,17 @@
         a { color: var(--accent2); text-decoration: none; }
         a:hover { text-decoration: underline; }
 
-        /* Nav */
         nav {
             position: fixed; top: 0; width: 100%; z-index: 100;
             padding: 1rem 2rem;
-            background: rgba(10, 10, 15, 0.92);
+            background: rgba(26, 22, 37, 0.92);
             backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(61, 53, 72, 0.5);
             display: flex; justify-content: space-between; align-items: center;
         }
         .logo {
             font-size: 1.5rem; font-weight: 700;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            background: linear-gradient(135deg, var(--accent), var(--sand));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         .nav-links { display: flex; align-items: center; gap: 2rem; }
@@ -59,9 +59,8 @@
             width: 8px; height: 8px; border-radius: 50%;
             background: var(--muted); transition: background 0.3s;
         }
-        .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .status-dot.online { background: var(--sage); box-shadow: 0 0 6px var(--sage); }
 
-        /* Hero */
         .hero {
             min-height: 100vh; display: flex; flex-direction: column;
             justify-content: center; align-items: center; text-align: center;
@@ -69,99 +68,100 @@
         }
         .hero::before {
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse at 50% 30%, rgba(108, 92, 231, 0.1) 0%, transparent 60%);
+            background: radial-gradient(ellipse at 50% 30%, rgba(224, 122, 95, 0.08) 0%, transparent 50%),
+                        radial-gradient(ellipse at 30% 70%, rgba(129, 178, 154, 0.05) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 60%, rgba(184, 169, 201, 0.05) 0%, transparent 50%);
         }
         .hero h1 {
             font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 800;
             line-height: 1.1; margin-bottom: 1.5rem; position: relative;
         }
         .hero h1 span {
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            background: linear-gradient(135deg, var(--accent), var(--sand));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         .hero p {
-            font-size: 1.25rem; color: var(--muted); max-width: 600px;
+            font-size: 1.2rem; color: var(--muted); max-width: 560px;
             margin-bottom: 2.5rem; position: relative;
         }
         .cta-group { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; position: relative; }
         .btn {
-            padding: 0.85rem 2rem; border-radius: 8px; font-size: 1rem;
+            padding: 0.85rem 2rem; border-radius: 12px; font-size: 1rem;
             font-weight: 600; text-decoration: none; transition: all 0.2s;
             cursor: pointer; border: none; display: inline-block;
         }
         .btn:hover { text-decoration: none; }
         .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover { background: #5a4bd4; transform: translateY(-1px); }
+        .btn-primary:hover { background: #c96a50; transform: translateY(-1px); }
         .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
         .btn-secondary:hover { border-color: var(--accent); }
         .btn-sm { padding: 0.6rem 1.5rem; font-size: 0.9rem; }
 
-        /* Badge */
         .protocol-badge {
             display: inline-flex; align-items: center; gap: 0.5rem;
             padding: 0.5rem 1rem; border-radius: 999px;
-            background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.2);
-            color: var(--green); font-size: 0.85rem; font-weight: 500;
+            background: rgba(129, 178, 154, 0.1); border: 1px solid rgba(129, 178, 154, 0.25);
+            color: var(--sage); font-size: 0.85rem; font-weight: 500;
             margin-bottom: 2rem; position: relative;
         }
         .protocol-badge::before { content: '🔒'; }
 
-        /* Sections */
+        .alpha-banner {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.4rem 0.9rem; border-radius: 999px;
+            background: rgba(242, 204, 143, 0.1); border: 1px solid rgba(242, 204, 143, 0.25);
+            color: var(--sand); font-size: 0.75rem; font-weight: 500;
+            margin-bottom: 1rem; position: relative;
+        }
+
         .section { padding: 6rem 2rem; max-width: 1100px; margin: 0 auto; }
         .section h2 { text-align: center; font-size: 2rem; margin-bottom: 1rem; }
         .section .subtitle { text-align: center; color: var(--muted); max-width: 600px; margin: 0 auto 3rem; }
         .section-alt { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
-        /* Feature grid */
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
         .card {
             background: var(--bg2); border: 1px solid var(--border);
-            border-radius: 12px; padding: 2rem; transition: border-color 0.2s;
+            border-radius: 16px; padding: 2rem; transition: border-color 0.2s;
         }
         .card:hover { border-color: var(--accent); }
         .card-icon { font-size: 2rem; margin-bottom: 1rem; }
         .card h3 { margin-bottom: 0.5rem; font-size: 1.1rem; }
         .card p { color: var(--muted); font-size: 0.95rem; }
 
-        /* ZK comparison */
         .zk-grid { display: grid; grid-template-columns: 1fr 1fr; max-width: 700px; margin: 0 auto; gap: 1rem; }
-        .zk-item { padding: 1.25rem; border-radius: 8px; font-size: 0.95rem; }
-        .zk-sees { background: rgba(108, 92, 231, 0.08); border: 1px solid rgba(108, 92, 231, 0.2); }
-        .zk-cant { background: rgba(255, 71, 87, 0.08); border: 1px solid rgba(255, 71, 87, 0.2); }
+        .zk-item { padding: 1.25rem; border-radius: 12px; font-size: 0.95rem; }
+        .zk-sees { background: rgba(129, 178, 154, 0.08); border: 1px solid rgba(129, 178, 154, 0.2); }
+        .zk-cant { background: rgba(224, 122, 122, 0.08); border: 1px solid rgba(224, 122, 122, 0.2); }
         .zk-label { font-weight: 600; margin-bottom: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-        .zk-sees .zk-label { color: var(--accent2); }
+        .zk-sees .zk-label { color: var(--sage); }
         .zk-cant .zk-label { color: var(--danger); }
 
-        /* Tech grid */
         .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
         .tech-item {
             text-align: center; padding: 1.5rem;
-            background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+            background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
         }
         .tech-item .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
         .tech-item .value { font-weight: 600; font-size: 0.95rem; }
 
-        /* Download */
         .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }
         .dl-card { text-align: center; }
         .dl-card .btn { margin-top: 1rem; }
 
-        /* Code blocks */
         .code {
             display: inline-block; background: var(--bg); border: 1px solid var(--border);
-            border-radius: 8px; padding: 0.75rem 1.5rem; color: var(--text);
+            border-radius: 10px; padding: 0.75rem 1.5rem; color: var(--text);
             font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem;
             max-width: 100%; overflow-x: auto; word-break: break-all;
         }
 
-        /* FAQ */
         .faq-item { border-bottom: 1px solid var(--border); padding: 1.5rem 0; }
         .faq-item:last-child { border-bottom: none; }
         .faq-q { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.5rem; cursor: pointer; }
         .faq-q::before { content: '▸ '; color: var(--accent); }
         .faq-a { color: var(--muted); font-size: 0.95rem; padding-left: 1.2rem; }
 
-        /* Footer */
         footer {
             padding: 3rem 2rem; text-align: center;
             border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem;
@@ -191,9 +191,9 @@
         </div>
     </nav>
 
-    <!-- Hero -->
     <section class="hero">
-        <div class="protocol-badge">E2E Encrypted · Zero Knowledge</div>
+        <div class="alpha-banner">⚠️ Alpha — not yet audited</div>
+        <div class="protocol-badge">E2E Encrypted · Zero Knowledge · Tor Ready</div>
         <h1>Communication<br>that <span>stays yours</span></h1>
         <p>End-to-end encrypted messaging, voice, and file sharing. The server is blind by design — it routes encrypted blobs and nothing more.</p>
         <div class="cta-group">
@@ -202,7 +202,6 @@
         </div>
     </section>
 
-    <!-- Features -->
     <section class="section" id="features">
         <h2>Everything encrypted, nothing exposed</h2>
         <p class="subtitle">Every message, call, and file transfer is encrypted before it leaves your device.</p>
@@ -213,49 +212,48 @@
                 <p>Double Ratchet with forward secrecy. Every message gets a unique key. Compromise one, the rest stay safe.</p>
             </div>
             <div class="card">
-                <div class="card-icon">📢</div>
-                <h3>Group Channels</h3>
-                <p>Sender Keys with bucket padding. The server can't determine message content or size. Keys rotate when members leave.</p>
+                <div class="card-icon">👥</div>
+                <h3>Group Chats & Channels</h3>
+                <p>Ad-hoc group DMs and persistent channels. Sender Keys with bucket padding. Keys rotate when members leave.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🎙️</div>
-                <h3>Voice Calls</h3>
-                <p>Peer-to-peer WebRTC for DMs — audio never touches the server. Channel voice uses AES-256-GCM encrypted relay.</p>
+                <h3>Voice & Group Calls</h3>
+                <p>P2P WebRTC for DMs. Group meeting calls for group chats and channels. AES-256-GCM encrypted audio relay.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🖥️</div>
                 <h3>Screen Sharing</h3>
-                <p>P2P in DMs, encrypted server-relay in channels. Quality presets from 360p to 1080p. Zero plaintext on the wire.</p>
+                <p>P2P in DMs, encrypted relay in channels. Quality presets from 360p to 1080p. Zero plaintext on the wire.</p>
             </div>
             <div class="card">
                 <div class="card-icon">📁</div>
                 <h3>P2P File Transfer</h3>
-                <p>Files go directly between peers via WebRTC. AES-256-GCM encrypted chunks. The server never sees your files.</p>
+                <p>Files go directly between peers via WebRTC. AES-256-GCM encrypted chunks. Built-in content filter.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">🧅</div>
+                <h3>Tor Integration</h3>
+                <p>Built-in Arti client hides your IP. Run the server as a .onion hidden service. Full network anonymity.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🔑</div>
                 <h3>No Accounts</h3>
-                <p>Your Ed25519 key is your identity. No email, no phone, no password on any server. BIP39 mnemonic for recovery.</p>
+                <p>Ed25519 keypair is your identity. No email, no phone. BIP39 mnemonic recovery. Age-verified locally.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🏠</div>
                 <h3>Self-Hosted</h3>
-                <p>Run your own server on a Raspberry Pi or VPS. ~9MB RAM. SQLite database. Your infrastructure, your rules.</p>
+                <p>Single binary on a Raspberry Pi or VPS. ~9MB RAM. SQLite. Your infrastructure, your rules.</p>
             </div>
             <div class="card">
-                <div class="card-icon">🔒</div>
-                <h3>Private Channels</h3>
-                <p>Invite-only channels with token-based access. Creator controls who joins. Tokens expire and have use limits.</p>
-            </div>
-            <div class="card">
-                <div class="card-icon">🧠</div>
-                <h3>Memory Zeroization</h3>
-                <p>Lock your profile to scrub all keys from RAM. Identity keys, ratchet states, sender keys — all zeroized instantly.</p>
+                <div class="card-icon">🛡️</div>
+                <h3>Content Safety</h3>
+                <p>Client-side NSFW filter (NSFWJS). Scans images and video frames locally. No data leaves your device.</p>
             </div>
         </div>
     </section>
 
-    <!-- Zero Knowledge -->
     <section class="section-alt" id="security" style="padding: 6rem 2rem;">
         <div style="max-width: 1100px; margin: 0 auto;">
             <h2 style="text-align:center;font-size:2rem;margin-bottom:1rem;">Zero-knowledge by design</h2>
@@ -263,17 +261,16 @@
             <div class="zk-grid">
                 <div class="zk-item zk-sees">
                     <div class="zk-label">Server sees</div>
-                    <p>Public keys · Encrypted blobs · Online/offline status · Channel membership (pubkeys only) · Message timestamps</p>
+                    <p>Public keys · Encrypted blobs · Online/offline status · Channel membership (pubkeys only) · Timestamps</p>
                 </div>
                 <div class="zk-item zk-cant">
                     <div class="zk-label">Server cannot</div>
-                    <p>Decrypt messages · Access private keys · Read nicknames · See file contents · Determine message sizes · Listen to calls · Recover accounts</p>
+                    <p>Decrypt messages · Access private keys · Read nicknames · See files · Determine message sizes · Listen to calls · Know your age or identity</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Tech Stack -->
     <section class="section" id="tech">
         <h2>Built on proven cryptography</h2>
         <p class="subtitle">No custom crypto. Industry-standard primitives, auditable Rust implementation.</p>
@@ -287,13 +284,12 @@
             <div class="tech-item"><div class="label">Server</div><div class="value">Rust · Axum</div></div>
             <div class="tech-item"><div class="label">Client</div><div class="value">Tauri v2 · Svelte 5</div></div>
             <div class="tech-item"><div class="label">Recovery</div><div class="value">BIP39 Mnemonic</div></div>
-            <div class="tech-item"><div class="label">RNG</div><div class="value">OS Entropy (OsRng)</div></div>
+            <div class="tech-item"><div class="label">Anonymity</div><div class="value">Tor (Arti)</div></div>
             <div class="tech-item"><div class="label">Voice</div><div class="value">WebRTC P2P</div></div>
-            <div class="tech-item"><div class="label">Files</div><div class="value">WebRTC Data Channel</div></div>
+            <div class="tech-item"><div class="label">Content Filter</div><div class="value">NSFWJS + TF.js</div></div>
         </div>
     </section>
 
-    <!-- Download -->
     <section class="section-alt" id="download" style="padding: 6rem 2rem;">
         <div style="max-width: 1100px; margin: 0 auto;">
             <h2 style="text-align:center;font-size:2rem;margin-bottom:1rem;">Get Mobium</h2>
@@ -302,7 +298,7 @@
                 <div class="card dl-card">
                     <div class="card-icon">🐧</div>
                     <h3>Linux</h3>
-                    <p>.deb · .AppImage · x86_64 + ARM64</p>
+                    <p>.deb · .AppImage · x86_64</p>
                     <a href="https://github.com/tarpy7/mobium/releases/latest/download/Mobium-linux-x86_64.deb" class="btn btn-primary btn-sm">Download .deb</a>
                     <a href="https://github.com/tarpy7/mobium/releases/latest/download/Mobium-linux-x86_64.AppImage" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;">.AppImage</a>
                 </div>
@@ -327,7 +323,6 @@
         </div>
     </section>
 
-    <!-- Self-Host -->
     <section class="section" id="self-host">
         <h2>Self-Host in 60 seconds</h2>
         <p class="subtitle">Everything you need is in the repo. No Docker required.</p>
@@ -345,7 +340,6 @@
         </div>
     </section>
 
-    <!-- FAQ -->
     <section class="section-alt" id="faq" style="padding: 6rem 2rem;">
         <div style="max-width: 700px; margin: 0 auto;">
             <h2 style="text-align:center;font-size:2rem;margin-bottom:3rem;">FAQ</h2>
@@ -355,39 +349,36 @@
             </div>
             <div class="faq-item">
                 <div class="faq-q">How is this different from other encrypted messengers?</div>
-                <div class="faq-a">Mobium uses the same proven cryptographic primitives but adds community features: persistent channels, voice chat rooms, screen sharing, and server-based message history. And you can self-host.</div>
+                <div class="faq-a">Mobium adds community features — persistent channels, group calls, screen sharing — while keeping everything E2E encrypted. Plus Tor integration and self-hosting.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">What if I lose my device?</div>
-                <div class="faq-a">When you create your identity, you get a 24-word BIP39 recovery phrase. Write it down. That's the only way to recover your keys — the server can't help you.</div>
+                <div class="faq-a">Your 24-word BIP39 recovery phrase is the only way to restore your keys. Write it down. The server can't help you recover — by design.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">Can the server operator read my messages?</div>
-                <div class="faq-a">No. Not even with full database access. Messages are encrypted with keys derived from X3DH and Double Ratchet. The server only sees opaque ciphertext blobs.</div>
+                <div class="faq-a">No. Not even with full database access. Messages are encrypted with keys derived from X3DH and Double Ratchet. The server only sees opaque ciphertext.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">Does file sharing go through the server?</div>
-                <div class="faq-a">No. Files transfer peer-to-peer via WebRTC data channels with AES-256-GCM encryption. The server only relays the signaling handshake.</div>
+                <div class="faq-a">No. Files transfer P2P via WebRTC with AES-256-GCM encryption. A client-side content filter scans media locally before sending.</div>
             </div>
             <div class="faq-item">
-                <div class="faq-q">What happens when someone leaves a channel?</div>
-                <div class="faq-a">All remaining members rotate their sender keys. The departed member's keys are destroyed. They cannot decrypt any future messages (forward secrecy).</div>
+                <div class="faq-q">Is there an age requirement?</div>
+                <div class="faq-a">Users must be 13 or older. Age verification happens entirely on your device — nothing is stored or sent to the server.</div>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
     <footer>
-        <p>Mobium — MIT / Apache-2.0</p>
+        <p>Mobium — Source Available (Personal Use)</p>
         <div class="links">
             <a href="https://github.com/tarpy7/mobium">Source Code</a>
-            <a href="https://github.com/tarpy7/mobium/blob/main/docs/CRYPTO.md">Crypto Docs</a>
-            <a href="https://github.com/tarpy7/mobium/blob/main/docs/ARCHITECTURE.md">Architecture</a>
+            <a href="https://github.com/tarpy7/mobium/blob/main/LICENSE">License</a>
         </div>
     </footer>
 
     <script>
-        // Live server status indicator
         async function checkServer() {
             const dot = document.getElementById('statusDot');
             const text = document.getElementById('statusText');
@@ -404,8 +395,6 @@
         }
         checkServer();
         setInterval(checkServer, 30000);
-
-        // Smooth scroll for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(a => {
             a.addEventListener('click', e => {
                 e.preventDefault();
