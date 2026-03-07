@@ -89,18 +89,26 @@
 	let groupDmMembers = $state<string[]>([]);
 	let groupDmInput = $state('');
 
+	let creatingChannel = $state(false);
 	async function createChannel() {
-		if (!channelName.trim()) return;
+		const name = channelName.trim();
+		if (!name) { addToast('Enter a channel name', 'error'); return; }
+		if (creatingChannel) return;
+		creatingChannel = true;
 		try {
-			const channelId = await invoke<string>('create_channel', { channelName: channelName.trim() });
-			upsertConversation({ id: channelId, name: channelName.trim(), type: 'group', unreadCount: 0 });
+			console.log('[createChannel] invoking with name:', name);
+			const channelId = await invoke<string>('create_channel', { channelName: name });
+			console.log('[createChannel] success, id:', channelId);
+			upsertConversation({ id: channelId, name, type: 'group', unreadCount: 0 });
 			activeConversationStore.set(channelId);
 			channelName = '';
 			showCreateChannel = false;
+			addToast(`Channel "${name}" created`, 'success');
 		} catch (e) {
-			console.error('Failed to create channel:', e);
+			console.error('[createChannel] error:', e);
 			addToast(`Failed to create channel: ${e}`, 'error');
 		}
+		creatingChannel = false;
 	}
 
 	async function joinChannel() {
@@ -410,7 +418,7 @@
 			</div>
 			<input type="text" bind:value={channelName} placeholder="Channel name" onkeydown={(e) => e.key === 'Enter' && createChannel()}
 				class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-2" />
-			<button onclick={createChannel} class="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark transition">Create</button>
+			<button onclick={createChannel} disabled={creatingChannel} class="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark transition disabled:opacity-50">{creatingChannel ? 'Creating…' : 'Create'}</button>
 		</div>
 	{/if}
 
