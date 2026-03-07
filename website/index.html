@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mobium — Encrypted Communication</title>
     <meta name="description" content="Zero-knowledge encrypted messaging, voice, and file sharing. The server is blind by design. Self-host or connect to a managed instance.">
-    <meta name="theme-color" content="#faf5f0">
+    <meta name="theme-color" content="#f0ddd0">
     <meta property="og:title" content="Mobium — Communication that stays yours">
     <meta property="og:description" content="End-to-end encrypted messaging. Zero-knowledge server. Self-hostable on a Raspberry Pi.">
     <meta property="og:type" content="website">
@@ -13,18 +13,18 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
     <style>
         :root {
-            --bg: #faf5f0;
-            --bg2: #fff8f3;
+            --bg: #f0ddd0;
+            --bg2: #f5e6d8;
             --accent: #e07a5f;
             --accent2: #c96a50;
-            --sage: #81b29a;
-            --sage-light: #a8d5ba;
-            --lavender: #b8a9c9;
-            --sand: #f2cc8f;
-            --text: #3d2c2c;
-            --muted: #8a7070;
-            --border: #e8ddd3;
-            --danger: #e07a7a;
+            --sage: #5a9a7d;
+            --sage-light: #81b29a;
+            --lavender: #9a88b0;
+            --sand: #d4a64a;
+            --text: #2c1810;
+            --muted: #6b4a3a;
+            --border: #d4bfae;
+            --danger: #c45a5a;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -32,13 +32,13 @@
             background: var(--bg); color: var(--text); line-height: 1.6;
             overflow-x: hidden;
         }
-        a { color: var(--accent2); text-decoration: none; }
+        a { color: var(--accent); text-decoration: none; font-weight: 500; }
         a:hover { text-decoration: underline; }
 
         nav {
             position: fixed; top: 0; width: 100%; z-index: 100;
             padding: 1rem 2rem;
-            background: rgba(250, 245, 240, 0.92);
+            background: rgba(240, 221, 208, 0.92);
             backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
             display: flex; justify-content: space-between; align-items: center;
@@ -101,7 +101,7 @@
             display: inline-flex; align-items: center; gap: 0.5rem;
             padding: 0.5rem 1rem; border-radius: 999px;
             background: rgba(129, 178, 154, 0.12); border: 1px solid rgba(129, 178, 154, 0.3);
-            color: #5a9a7d; font-size: 0.85rem; font-weight: 500;
+            color: #3d7a5d; font-size: 0.85rem; font-weight: 600;
             margin-bottom: 2rem; position: relative;
         }
         .protocol-badge::before { content: '🔒'; }
@@ -110,14 +110,14 @@
             display: inline-flex; align-items: center; gap: 0.5rem;
             padding: 0.4rem 0.9rem; border-radius: 999px;
             background: rgba(242, 204, 143, 0.15); border: 1px solid rgba(242, 204, 143, 0.4);
-            color: #b08a40; font-size: 0.75rem; font-weight: 500;
+            color: #8a6a20; font-size: 0.75rem; font-weight: 600;
             margin-bottom: 1rem; position: relative;
         }
 
         .section { padding: 6rem 2rem; max-width: 1100px; margin: 0 auto; }
         .section h2 { text-align: center; font-size: 2rem; margin-bottom: 1rem; }
         .section .subtitle { text-align: center; color: var(--muted); max-width: 600px; margin: 0 auto 3rem; }
-        .section-alt { background: #f5ede5; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        .section-alt { background: #e8d3c3; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
         .card {
@@ -135,8 +135,8 @@
         .zk-sees { background: rgba(129, 178, 154, 0.1); border: 1px solid rgba(129, 178, 154, 0.3); }
         .zk-cant { background: rgba(224, 122, 122, 0.1); border: 1px solid rgba(224, 122, 122, 0.3); }
         .zk-label { font-weight: 600; margin-bottom: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-        .zk-sees .zk-label { color: #5a9a7d; }
-        .zk-cant .zk-label { color: #c45a5a; }
+        .zk-sees .zk-label { color: #3d7a5d; }
+        .zk-cant .zk-label { color: #a04040; }
 
         .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
         .tech-item {
@@ -152,8 +152,8 @@
         .dl-card .btn { margin-top: 1rem; }
 
         .code {
-            display: inline-block; background: #f0e6dc; border: 1px solid var(--border);
-            border-radius: 10px; padding: 0.75rem 1.5rem; color: #4a3636;
+            display: inline-block; background: #e4cfc0; border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem 1.5rem; color: #2c1810;
             font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem;
             max-width: 100%; overflow-x: auto; word-break: break-all;
         }
@@ -336,7 +336,7 @@
                 <div class="code" style="margin:0.5rem 0 1rem;">cp .env.example .env && mkdir -p data</div>
                 <p><strong style="color:var(--accent2);">3.</strong> Run</p>
                 <div class="code" style="margin:0.5rem 0 1rem;">./target/release/mobium-server</div>
-                <p><strong style="color:var(--accent2);">4.</strong> Connect your client to <code style="background:#f0e6dc;padding:0.1rem 0.4rem;border-radius:4px;">ws://your-ip:8443</code></p>
+                <p><strong style="color:var(--accent2);">4.</strong> Connect your client to <code style="background:#e4cfc0;padding:0.1rem 0.4rem;border-radius:4px;color:#2c1810;">ws://your-ip:8443</code></p>
             </div>
             <p style="color:var(--muted);font-size:0.85rem;text-align:center;margin-top:1.5rem;">Runs on a Raspberry Pi 5 · ~9MB RAM · SQLite · Zero config</p>
         </div>

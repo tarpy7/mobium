@@ -3,17 +3,17 @@
 @tailwind utilities;
 
 @layer base {
-	/* ── Light theme (default): Pastel sunset ─────────────── */
+	/* ── Light theme (default): Warm sunset ───────────────── */
 	:root {
-		--bg: #faf5f0;
-		--surface: #fff8f3;
-		--surface-light: #f0e6dc;
-		--text: #3d2c2c;
-		--text-muted: #8a7070;
-		--sunset-gradient: linear-gradient(135deg, #fff8f3 0%, #faf5f0 50%, #f5ede5 100%);
-		--scrollbar-thumb: rgba(180, 160, 140, 0.4);
-		--scrollbar-hover: rgba(180, 160, 140, 0.6);
-		--selection: rgba(224, 122, 95, 0.2);
+		--bg: #f0ddd0;
+		--surface: #f5e6d8;
+		--surface-light: #e4cfc0;
+		--text: #2c1810;
+		--text-muted: #6b4a3a;
+		--sunset-gradient: linear-gradient(135deg, #f5e6d8 0%, #f0ddd0 50%, #ebd4c4 100%);
+		--scrollbar-thumb: rgba(140, 100, 80, 0.4);
+		--scrollbar-hover: rgba(140, 100, 80, 0.6);
+		--selection: rgba(224, 122, 95, 0.25);
 	}
 
 	/* ── Dark theme: Deep plum ────────────────────────────── */
