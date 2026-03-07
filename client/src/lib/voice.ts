@@ -21,6 +21,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { get } from 'svelte/store';
 import { voiceCallStore, displayName, addToast, type VoiceCallState } from '$lib/stores';
+import { filterCandidate } from '$lib/iceFilter';
 
 /**
  * Request microphone access with fallbacks for Tauri WebView environments.
@@ -749,10 +750,12 @@ function setupPeerConnectionHandlers(peerPubkey: string) {
 	if (!peerConnection) return;
 	const pc = peerConnection; // capture ref for closures
 
-	// ICE candidate: send to peer via signaling server
+	// ICE candidate: filter private IPs, then send to peer via signaling
 	pc.onicecandidate = (event) => {
 		if (event.candidate) {
-			const candidatePayload = new TextEncoder().encode(JSON.stringify(event.candidate.toJSON()));
+			const safe = filterCandidate(event.candidate);
+			if (!safe) return; // private IP stripped
+			const candidatePayload = new TextEncoder().encode(JSON.stringify(safe.toJSON()));
 			invoke('send_voice_signal', {
 				recipient: peerPubkey,
 				signalType: 'ice_candidate',

@@ -115,6 +115,7 @@ pub async fn get_active_profile(state: State<'_, AppState>) -> Result<Option<Str
 /// Generate a new identity
 #[tauri::command]
 pub async fn generate_identity(password: String, state: State<'_, AppState>) -> Result<String, String> {
+    crate::validate::validate_password(&password)?;
     match _generate_identity(password, state).await {
         Ok(mnemonic) => Ok(mnemonic),
         Err(e) => Err(e.to_string()),
@@ -189,6 +190,8 @@ pub async fn import_mnemonic(
     password: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    crate::validate::validate_mnemonic(&mnemonic)?;
+    crate::validate::validate_password(&password)?;
     match _import_mnemonic(mnemonic, password, state).await {
         Ok(_) => Ok(()),
         Err(e) => Err(e.to_string()),
@@ -319,6 +322,7 @@ pub async fn connect_server(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
+    crate::validate::validate_server_url(&server_url)?;
     match crate::websocket::connect(server_url, app_handle, state).await {
         Ok(_) => Ok(true),
         Err(e) => Err(e.to_string()),
@@ -352,6 +356,10 @@ pub async fn send_message(
     content: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    // Validate inputs
+    crate::validate::validate_pubkey_hex(&recipient)?;
+    crate::validate::validate_message_content(&content)?;
+
     tracing::info!("send_message (DM) called: recipient={}, content_len={}", &recipient[..16.min(recipient.len())], content.len());
 
     let conn = {
@@ -362,8 +370,7 @@ pub async fn send_message(
         }
     };
 
-    let recipient_bytes = hex::decode(&recipient)
-        .map_err(|_| "Invalid recipient pubkey hex".to_string())?;
+    let recipient_bytes = crate::validate::validate_pubkey_hex(&recipient)?;
 
     // Check if we have an existing ratchet session
     let has_session = {
@@ -604,6 +611,7 @@ pub async fn init_dm_session(
     recipient: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    crate::validate::validate_pubkey_hex(&recipient)?;
     tracing::info!("init_dm_session: initiating with {}", &recipient[..16.min(recipient.len())]);
 
     let conn = {
@@ -1313,6 +1321,7 @@ pub async fn create_channel(
     channel_name: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    crate::validate::validate_name(&channel_name, "Channel")?;
     let conn = {
         let conn_guard = state.connection.read().await;
         match conn_guard.as_ref() {
@@ -1611,6 +1620,8 @@ pub async fn set_nickname(
     nickname: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    crate::validate::validate_pubkey_hex(&pubkey)?;
+    crate::validate::validate_nickname(&nickname)?;
     db::set_nickname(&state, &pubkey, &nickname).await
         .map_err(|e| e.to_string())
 }

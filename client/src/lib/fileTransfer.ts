@@ -18,6 +18,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { writable, get } from 'svelte/store';
+import { filterCandidate } from './iceFilter';
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks over data channel
 
@@ -160,14 +161,17 @@ export async function sendFile(peerPubkey: string, file: File): Promise<string> 
 			dc.onopen = () => resolve();
 			dc.onerror = (e) => reject(new Error(`Data channel error: ${e}`));
 			// Set up ICE candidate handling
+			
 			pc.onicecandidate = async (event) => {
 				if (event.candidate) {
+					const filtered = filterCandidate(event.candidate);
+					if (!filtered) return;
 					await invoke('send_voice_signal', {
 						recipient: peerPubkey,
 						signalType: 'file_ice_candidate',
 						payload: new TextEncoder().encode(JSON.stringify({
 							transferId,
-							candidate: event.candidate.toJSON(),
+							candidate: filtered.toJSON(),
 						})),
 					});
 				}
@@ -349,14 +353,17 @@ export async function acceptFileTransfer(transferId: string): Promise<void> {
 			};
 		};
 
+		
 		pc.onicecandidate = async (event) => {
 			if (event.candidate) {
+				const filtered = filterCandidate(event.candidate);
+				if (!filtered) return;
 				await invoke('send_voice_signal', {
 					recipient: transfer.peerPubkey,
 					signalType: 'file_ice_candidate',
 					payload: new TextEncoder().encode(JSON.stringify({
 						transferId,
-						candidate: event.candidate.toJSON(),
+						candidate: filtered.toJSON(),
 					})),
 				});
 			}

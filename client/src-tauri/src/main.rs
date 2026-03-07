@@ -11,6 +11,7 @@ mod crypto;
 mod websocket;
 mod state;
 mod tor;
+mod validate;
 
 use state::AppState;
 

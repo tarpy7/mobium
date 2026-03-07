@@ -86,10 +86,9 @@ async function loadModel(): Promise<nsfwjs.NSFWJS> {
 			await tf.setBackend('cpu');
 		}
 
-		model = await nsfwjs.load(
-			'https://cdn.jsdelivr.net/npm/nsfwjs@4/dist/model/',
-			{ type: 'graph', size: 299 }
-		);
+		// Load bundled MobileNetV2 model from the npm package (no CDN fetch).
+		// nsfwjs.load() with no arguments uses the built-in model.
+		model = await nsfwjs.load();
 		nsfwFilterReady.set(true);
 		console.log('[nsfw] Model loaded successfully');
 		return model;
