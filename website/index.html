@@ -262,48 +262,48 @@
         <div class="grid">
             <div class="card">
                 <div class="card-icon">💬</div>
-                <h3>Encrypted DMs</h3>
-                <p>Double Ratchet with forward secrecy. Every message gets a unique key. Compromise one, the rest stay safe.</p>
+                <h3>Encrypted Messages</h3>
+                <p>Messages are encrypted on your device and relayed as opaque blobs through the server. Offline recipients get them on reconnect. Double Ratchet gives every message a unique key.</p>
             </div>
             <div class="card">
                 <div class="card-icon">👥</div>
-                <h3>Group Chats & Channels</h3>
-                <p>Ad-hoc group DMs and persistent channels. Sender Keys with bucket padding. Keys rotate when members leave.</p>
+                <h3>Groups & Channels</h3>
+                <p>Ad-hoc group DMs and persistent channels. Sender Keys with bucket padding so the server can't see message sizes. Keys rotate when members leave.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🎙️</div>
-                <h3>Voice & Group Calls</h3>
-                <p>P2P WebRTC for DMs. Group meeting calls for group chats and channels. AES-256-GCM encrypted audio relay.</p>
+                <h3>Voice Calls</h3>
+                <p>≤4 people: direct P2P mesh — audio never touches the server. 5–40: AES-256-GCM encrypted relay through the server. Capped at 40 per channel.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🖥️</div>
                 <h3>Screen Sharing</h3>
-                <p>P2P in DMs, encrypted relay in channels. Quality presets from 360p to 1080p. Zero plaintext on the wire.</p>
+                <p>P2P in DMs (server never sees it), encrypted relay in channels. Quality presets from 360p to 1080p.</p>
             </div>
             <div class="card">
                 <div class="card-icon">📁</div>
-                <h3>P2P File Transfer</h3>
-                <p>Files go directly between peers via WebRTC. AES-256-GCM encrypted chunks. Built-in content filter.</p>
+                <h3>File Transfer</h3>
+                <p>DM file transfers go directly between peers via WebRTC — the server never sees file data. AES-256-GCM encrypted chunks with a client-side NSFW filter.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🧅</div>
                 <h3>Tor Integration</h3>
-                <p>Built-in Arti client hides your IP. Run the server as a .onion hidden service. Full network anonymity.</p>
+                <p>Built-in Arti client hides your IP from the server. Run the server as a .onion hidden service for full anonymity on both ends.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🔑</div>
                 <h3>No Accounts</h3>
-                <p>Ed25519 keypair is your identity. No email, no phone. BIP39 mnemonic recovery. Age-verified locally.</p>
+                <p>Ed25519 keypair is your identity. No email, no phone number. 24-word BIP39 mnemonic recovery. Age verified locally — nothing stored.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🏠</div>
                 <h3>Self-Hosted</h3>
-                <p>Single binary on a Raspberry Pi or VPS. ~9MB RAM. SQLite. Your infrastructure, your rules.</p>
+                <p>Single binary on a Raspberry Pi or VPS. ~9MB RAM. SQLite. No Docker needed. Your infrastructure, your rules.</p>
             </div>
             <div class="card">
                 <div class="card-icon">🛡️</div>
                 <h3>Content Safety</h3>
-                <p>Client-side NSFW filter (NSFWJS). Scans images and video frames locally. No data leaves your device.</p>
+                <p>Client-side NSFW filter runs entirely on your device. If the model fails to load, all image/video transfers are blocked. Nothing leaves your device.</p>
             </div>
         </div>
     </section>
@@ -315,11 +315,11 @@
             <div class="zk-grid">
                 <div class="zk-item zk-sees">
                     <div class="zk-label">Server sees</div>
-                    <p>Public keys · Encrypted blobs · Online/offline status · Channel membership (pubkeys only) · Timestamps</p>
+                    <p>Public keys · Encrypted message blobs · Encrypted voice relay (5+ callers) · Online/offline status · Channel membership (pubkeys only) · Timestamps</p>
                 </div>
                 <div class="zk-item zk-cant">
                     <div class="zk-label">Server cannot</div>
-                    <p>Decrypt messages · Access private keys · Read nicknames · See files · Determine message sizes · Listen to calls · Know your age or identity</p>
+                    <p>Decrypt anything · Access private keys · Read nicknames · See DM files (P2P) · Determine message sizes · Hear voice audio · Know your age or real identity</p>
                 </div>
             </div>
         </div>
@@ -415,7 +415,7 @@
             </div>
             <div class="faq-item">
                 <div class="faq-q">Does file sharing go through the server?</div>
-                <div class="faq-a">No. Files transfer P2P via WebRTC with AES-256-GCM encryption. A client-side content filter scans media locally before sending.</div>
+                <div class="faq-a">In DMs, no — files transfer directly between peers via WebRTC with AES-256-GCM encryption. The server never sees file data. Channel/group file sharing is not yet supported. A client-side content filter scans media locally before sending.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">Is there an age requirement?</div>

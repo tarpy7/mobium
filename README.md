@@ -18,16 +18,19 @@ Mobium is a communication platform where every message, voice call, and file tra
 
 ## Features
 
-- **Encrypted DMs** — Double Ratchet with forward secrecy
-- **Group Channels** — Sender Keys with bucket padding (server can't see message sizes)
-- **Voice Calls** — P2P WebRTC (DMs) / AES-256-GCM encrypted relay (channels)
-- **Screen Sharing** — P2P or encrypted server-relay, 360p–1080p
-- **P2P File Transfer** — WebRTC data channels, server never sees file data
+- **Encrypted DMs** — X3DH key exchange + Double Ratchet with forward secrecy. Messages are encrypted client-side and relayed as opaque blobs through the server (store-and-forward for offline delivery)
+- **Group DMs** — Ad-hoc encrypted group conversations without creating a persistent channel
+- **Channels** — Persistent group spaces with Sender Keys and bucket padding (server can't see message sizes)
+- **Voice Calls** — P2P WebRTC mesh for ≤4 participants (audio never touches the server); encrypted Opus relay through the server for 5–40 participants. Channels are capped at 40 callers
+- **Screen Sharing** — P2P in DMs, encrypted server-relay in channels (360p–1080p)
+- **File Transfer** — P2P via WebRTC data channels in DMs (server never sees file data). Client-side NSFW filter scans images/video locally before sending. Channel/group file sharing is not yet supported
 - **Private Channels** — Invite tokens with use limits and expiry
+- **Content Safety** — NSFW filter (NSFWJS) runs entirely on-device. Fail-closed: if the model fails to load, all image/video transfers are blocked. No data leaves your device
+- **Age Gate** — Users under 13 cannot create accounts. Verification is purely client-side; nothing is stored or sent to the server
 - **Profile Lock** — Zeroize all crypto material from RAM on demand
-- **No Accounts** — Ed25519 public key = identity, BIP39 mnemonic recovery
-- **Tor Integration** — Route all traffic through Tor; hide your IP from the server and network observers
-- **Self-Hostable** — Single binary, SQLite, runs on a Raspberry Pi
+- **No Accounts** — Ed25519 public key = identity, BIP39 mnemonic recovery. No email, no phone number
+- **Tor Integration** — Route all traffic through Tor via embedded Arti client; hide your IP from the server and network observers
+- **Self-Hostable** — Single binary, SQLite, ~9MB RAM, runs on a Raspberry Pi
 - **Onion Service Ready** — Run the server as a Tor hidden service for full anonymity on both ends
 
 ## Quick Start
@@ -61,24 +64,30 @@ Pre-built binaries: [Releases](https://github.com/tarpy7/mobium/releases)
 ```
 ┌──────────────┐                    ┌──────────────┐
 │   Client A   │◄──── WebRTC P2P ──►│   Client B   │
-│  (Tauri/Svelte)│    (voice/files)  │  (Tauri/Svelte)│
-└──────┬───────┘                    └──────┬───────┘
-       │ WSS (encrypted blobs)             │
-       │ [optional: via Tor circuit]       │
-       └──────────────┬───────────────────┘
+│  (Tauri/Svelte)│  (DM voice/files) │  (Tauri/Svelte)│
+└──────┬───────┘   (≤4 group voice)  └──────┬───────┘
+       │                                    │
+       │ WSS (encrypted blobs)              │
+       │ [optional: via Tor circuit]        │
+       └──────────────┬────────────────────┘
                       ▼
               ┌───────────────┐
               │  Mobium Server │  ← can run as .onion
               │  (Rust/Axum)   │
               │  SQLite DB     │
               └───────────────┘
-              Server sees: pubkeys,
-              encrypted blobs, timestamps.
-              Server CANNOT see: message
-              content, files, voice audio,
-              channel names, nicknames.
-              With Tor: server also cannot
-              see client IP addresses.
+
+  Through server (encrypted):     P2P (never touches server):
+  • DM & channel messages         • DM voice calls
+  • Prekey bundles                 • DM screen sharing
+  • Channel voice (5-40 users)    • DM file transfers
+  • Channel screen sharing        • Small group voice (≤4)
+  • Offline message delivery
+
+  Server sees: pubkeys, encrypted blobs, timestamps.
+  Server CANNOT see: message content, files, voice
+  audio, channel names, nicknames, age, identity.
+  With Tor: server also cannot see client IP addresses.
 ```
 
 ## Tor Integration
@@ -159,11 +168,17 @@ Copy `.env.example` to `.env` and configure:
 ## Security
 
 - All crypto operations use `OsRng` (OS entropy)
+- Message rate limiting: 1 per 0.3 seconds per user (server + client enforced)
 - Connection rate limiting and per-IP limits
+- Voice channel cap: 40 participants max
 - Ed25519 challenge-response authentication
 - Constant-time signature verification via `subtle`
 - Memory zeroization on profile lock (`zeroize` crate)
 - Sender key rotation on member departure (forward secrecy)
+- CSP: no external CDN loads, frame-src/object-src blocked
+- WebRTC ICE candidate filtering: private/local IPs stripped before peer exchange
+- Input validation on all client→server commands (pubkeys, names, messages)
+- Client-side NSFW filter (fail-closed)
 - No plaintext ever stored server-side
 
 ## Project Structure
