@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { activeConversationStore, messagesStore, conversationsStore, addMessage, connectionStore, clearUnread, displayName, nicknamesStore, voiceCallStore, channelVoiceStore, addToast } from '$lib/stores';
+	import { activeConversationStore, messagesStore, conversationsStore, addMessage, connectionStore, clearUnread, displayName, nicknamesStore, voiceCallStore, channelVoiceStore, addToast, subChannelsStore, activeSubChannelStore } from '$lib/stores';
 	import type { Message } from '$lib/stores';
 	import MemberList from './MemberList.svelte';
+	import ChannelSettings from './ChannelSettings.svelte';
 	import { startCall } from '$lib/voice';
 	import { joinVoice, leaveVoice, toggleVoiceMute } from '$lib/channelVoice';
 	import { startChannelScreenShare, stopChannelScreenShare, bindScreenVideo } from '$lib/channelScreen';
@@ -15,11 +16,13 @@
 	let editingNickname = $state<string | null>(null);
 	let nicknameInput = $state('');
 	let showMembers = $state(false);
+	let showSettings = $state(false);
 	let showScreenQualityPicker = $state(false);
 	let channelScreenVideoEl = $state<HTMLVideoElement | null>(null);
 	let showChannelScreenShare = $state(true);
-	/** When true, screen share floats as a small PiP in the corner */
 	let screenShareMinimized = $state(false);
+	/** User's role in current channel (for showing settings gear) */
+	let myRole = $state('member');
 	let dmSessionStatus = $state<'unknown' | 'establishing' | 'active'>('unknown');
 
 	const activeConversation = $derived(
@@ -258,6 +261,21 @@
 			showChannelScreenShare = true;
 		}
 	});
+
+	// Load sub-channels and detect role when entering a channel
+	$effect(() => {
+		if (activeConversation?.type === 'group') {
+			invoke('get_sub_channels', { channelId: activeConversation.id }).catch(() => {});
+			// Detect own role from member list
+			invoke<Array<{ pubkey: string; role: string; isSelf: boolean }>>('get_channel_members', { channelId: activeConversation.id })
+				.then(members => {
+					const me = members.find(m => m.isSelf);
+					if (me) myRole = me.role;
+				}).catch(() => {});
+			// Reset sub-channel when switching channels
+			activeSubChannelStore.set(null);
+		}
+	});
 </script>
 
 {#if activeConversation}
@@ -269,7 +287,15 @@
 				{activeConversation.type === 'dm' ? '👤' : '👥'}
 			</div>
 			<div>
-				<h2 class="font-semibold text-text">{activeConversation.name}</h2>
+				<h2 class="font-semibold text-text">
+					{activeConversation.name}
+					{#if activeConversation.type === 'group' && $activeSubChannelStore}
+						{@const activeSub = ($subChannelsStore.get(activeConversation.id) || []).find(s => s.id === $activeSubChannelStore)}
+						{#if activeSub}
+							<span class="text-text-muted font-normal text-sm ml-1.5">› {activeSub.kind === 'voice' ? '🔊' : '💬'} {activeSub.name}</span>
+						{/if}
+					{/if}
+				</h2>
 				<div class="text-xs text-text-muted">
 					{#if activeConversation.type === 'dm'}
 						{#if dmSessionStatus === 'active'}
@@ -434,14 +460,26 @@
 			{/if}
 
 			<button
-				onclick={() => { showMembers = !showMembers; }}
+				onclick={() => { showMembers = !showMembers; showSettings = false; }}
 				class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition hover:bg-surface-light {showMembers ? 'bg-surface-light text-primary' : 'text-text-muted hover:text-text'}"
-				title="Toggle member list"
+				title="Members"
 			>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
 				</svg>
 				Members
+			</button>
+
+			<!-- Settings gear (shows rooms, bans, password) -->
+			<button
+				onclick={() => { showSettings = !showSettings; showMembers = false; }}
+				class="rounded-lg p-1.5 text-xs transition hover:bg-surface-light {showSettings ? 'bg-surface-light text-primary' : 'text-text-muted hover:text-text'}"
+				title="Channel settings"
+			>
+				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+				</svg>
 			</button>
 		{/if}
 			<button
@@ -636,10 +674,19 @@
 		{/if}
 	</div>
 
-	<!-- Member List Panel -->
-	{#if showMembers && activeConversation?.type === 'group'}
+	<!-- Side Panel (Members or Settings) -->
+	{#if activeConversation?.type === 'group' && (showMembers || showSettings)}
 		<div class="w-64 border-l border-surface-light bg-surface flex-shrink-0 overflow-hidden">
-			<MemberList channelId={activeConversation.id} onclose={() => { showMembers = false; }} />
+			{#if showMembers}
+				<MemberList channelId={activeConversation.id} onclose={() => { showMembers = false; }} />
+			{:else if showSettings}
+				<ChannelSettings
+					channelId={activeConversation.id}
+					isOwner={myRole === 'owner'}
+					isMod={myRole === 'owner' || myRole === 'moderator'}
+					onclose={() => { showSettings = false; }}
+				/>
+			{/if}
 		</div>
 	{/if}
 

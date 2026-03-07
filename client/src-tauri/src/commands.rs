@@ -1492,6 +1492,7 @@ pub async fn leave_channel(
 pub struct ChannelMember {
     pub pubkey: String,
     pub nickname: Option<String>,
+    pub role: String,
     #[serde(rename = "isSelf")]
     pub is_self: bool,
 }
@@ -1531,22 +1532,36 @@ pub async fn get_channel_members(
         .map_err(|e| e.to_string())?;
     let nick_map: std::collections::HashMap<String, String> = nicknames.into_iter().collect();
 
+    // Get cached roles
+    let roles = {
+        let roles_guard = state.member_roles.read().await;
+        roles_guard.get(&channel_id).cloned().unwrap_or_default()
+    };
+
     // Build member list
     let mut members: Vec<ChannelMember> = member_pubkeys.iter().map(|pk| {
         let pubkey_hex = hex::encode(pk);
         let is_self = pubkey_hex == my_pubkey;
         let nickname = nick_map.get(&pubkey_hex).cloned();
+        let role = roles.get(&pubkey_hex).cloned().unwrap_or_else(|| "member".to_string());
         ChannelMember {
             pubkey: pubkey_hex,
             nickname,
+            role,
             is_self,
         }
     }).collect();
 
-    // Sort: self first, then by nickname/pubkey
+    // Sort: self first, then by role (owner > moderator > member), then by name
+    fn role_order(role: &str) -> u8 {
+        match role { "owner" => 0, "moderator" => 1, _ => 2 }
+    }
     members.sort_by(|a, b| {
         if a.is_self && !b.is_self { return std::cmp::Ordering::Less; }
         if !a.is_self && b.is_self { return std::cmp::Ordering::Greater; }
+        let ra = role_order(&a.role);
+        let rb = role_order(&b.role);
+        if ra != rb { return ra.cmp(&rb); }
         let a_name = a.nickname.as_deref().unwrap_or(&a.pubkey);
         let b_name = b.nickname.as_deref().unwrap_or(&b.pubkey);
         a_name.cmp(b_name)
@@ -1599,6 +1614,7 @@ pub async fn get_all_known_users(
         Some(ChannelMember {
             pubkey: pubkey_hex,
             nickname,
+            role: "member".to_string(),
             is_self: false,
         })
     }).collect();
@@ -1722,6 +1738,189 @@ pub async fn get_friends(
 ) -> Result<Vec<(String, Option<String>)>, String> {
     db::get_friends(&state).await
         .map_err(|e| e.to_string())
+}
+
+// ─── Channel Moderation ─────────────────────────────────────────────────────
+
+/// Set a member's role in a channel (owner only).
+#[tauri::command]
+pub async fn set_member_role(
+    channel_id: String,
+    target_pubkey: String,
+    role: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let target_bytes = crate::validate::validate_pubkey_hex(&target_pubkey)?;
+    if role != "moderator" && role != "member" {
+        return Err("Role must be 'moderator' or 'member'".to_string());
+    }
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "set_role", "channel_id": channel_bytes, "target_pubkey": target_bytes, "role": role,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Ban a user from a channel (owner or moderator).
+#[tauri::command]
+pub async fn ban_user(
+    channel_id: String,
+    target_pubkey: String,
+    reason: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let target_bytes = crate::validate::validate_pubkey_hex(&target_pubkey)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "ban_user", "channel_id": channel_bytes, "target_pubkey": target_bytes, "reason": reason,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Unban a user from a channel (owner or moderator).
+#[tauri::command]
+pub async fn unban_user(
+    channel_id: String,
+    target_pubkey: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let target_bytes = crate::validate::validate_pubkey_hex(&target_pubkey)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "unban_user", "channel_id": channel_bytes, "target_pubkey": target_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Get ban list for a channel (owner or moderator).
+#[tauri::command]
+pub async fn get_bans(
+    channel_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_bans", "channel_id": channel_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Create a sub-channel (text or voice room) inside a channel.
+#[tauri::command]
+pub async fn create_sub_channel(
+    channel_id: String,
+    name: String,
+    kind: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    if kind != "text" && kind != "voice" {
+        return Err("Kind must be 'text' or 'voice'".to_string());
+    }
+    if name.is_empty() || name.len() > 64 {
+        return Err("Name must be 1-64 characters".to_string());
+    }
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "create_sub_channel", "channel_id": channel_bytes, "name": name, "kind": kind,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Delete a sub-channel.
+#[tauri::command]
+pub async fn delete_sub_channel(
+    channel_id: String,
+    sub_channel_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let sub_bytes = hex::decode(&sub_channel_id).map_err(|_| "Invalid sub_channel_id")?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "delete_sub_channel", "channel_id": channel_bytes, "sub_channel_id": sub_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Get sub-channels for a channel.
+#[tauri::command]
+pub async fn get_sub_channels(
+    channel_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_sub_channels", "channel_id": channel_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Set the channel join password (owner only). Empty string clears it.
+/// Password is SHA-256 hashed client-side — server never sees plaintext.
+#[tauri::command]
+pub async fn set_channel_password(
+    channel_id: String,
+    password: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    use sha2::Digest;
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    // Hash client-side so plaintext never touches the wire
+    let hashed = if password.is_empty() {
+        String::new()
+    } else {
+        format!("{:x}", sha2::Sha256::digest(password.as_bytes()))
+    };
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "set_channel_password", "channel_id": channel_bytes, "password": hashed,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+/// Join a channel with optional password.
+/// Password is SHA-256 hashed client-side before sending.
+#[tauri::command]
+pub async fn join_channel_with_password(
+    channel_id: String,
+    password: Option<String>,
+    invite_token: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    use sha2::Digest;
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let invite_bytes = invite_token.as_ref().map(|t| hex::decode(t).unwrap_or_default());
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let mut payload = serde_json::json!({
+        "type": "join_channel", "channel_id": channel_bytes,
+    });
+    if let Some(pw) = &password {
+        if !pw.is_empty() {
+            // Hash before sending — server compares hashes, never sees plaintext
+            let hashed = format!("{:x}", sha2::Sha256::digest(pw.as_bytes()));
+            payload["password"] = serde_json::json!(hashed);
+        }
+    }
+    if let Some(tok) = &invite_bytes {
+        payload["invite_token"] = serde_json::json!(tok);
+    }
+    let msg = rmp_serde::to_vec_named(&payload).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
 }
 
 // ─── Voice Calling ──────────────────────────────────────────────────────────

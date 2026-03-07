@@ -31,6 +31,8 @@ pub struct AppState {
     /// Cached channel member pubkeys, keyed by channel_id (hex).
     /// Populated from server `members_response` messages.
     pub channel_members: RwLock<HashMap<String, Vec<Vec<u8>>>>,
+    /// Cached member roles: channel_id -> (pubkey_hex -> role)
+    pub member_roles: RwLock<HashMap<String, HashMap<String, String>>>,
     /// Cached Ed25519 → X25519 public key mapping.
     /// Populated from `members_with_keys` in the server's members_response.
     pub x25519_keys: RwLock<HashMap<Vec<u8>, Vec<u8>>>,

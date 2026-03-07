@@ -82,6 +82,7 @@
 	let channelName = $state('');
 	let joinChannelId = $state('');
 	let joinChannelName = $state('');
+	let joinChannelPassword = $state('');
 
 	// Group DM
 	let groupDmName = $state('');
@@ -100,12 +101,18 @@
 	async function joinChannel() {
 		if (!joinChannelId.trim()) return;
 		try {
-			const result = await invoke<{ channel_id: string }>('join_channel', { channelId: joinChannelId.trim() });
-			const displayName = joinChannelName.trim() || joinChannelId.trim().substring(0, 12);
-			upsertConversation({ id: joinChannelId.trim(), name: displayName, type: 'group', unreadCount: 0 });
+			const pw = joinChannelPassword.trim() || undefined;
+			await invoke('join_channel_with_password', {
+				channelId: joinChannelId.trim(),
+				password: pw || null,
+				inviteToken: null,
+			});
+			const name = joinChannelName.trim() || joinChannelId.trim().substring(0, 12);
+			upsertConversation({ id: joinChannelId.trim(), name, type: 'group', unreadCount: 0 });
 			activeConversationStore.set(joinChannelId.trim());
 			joinChannelId = '';
 			joinChannelName = '';
+			joinChannelPassword = '';
 			showJoinChannel = false;
 		} catch (e) { console.error('Failed to join channel:', e); }
 	}
@@ -409,7 +416,8 @@
 				</button>
 			</div>
 			<input type="text" bind:value={joinChannelId} placeholder="Channel ID" class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-1.5" />
-			<input type="text" bind:value={joinChannelName} placeholder="Display name (optional)" class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-2" />
+			<input type="text" bind:value={joinChannelName} placeholder="Display name (optional)" class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-1.5" />
+			<input type="password" bind:value={joinChannelPassword} placeholder="Password (if required)" class="w-full rounded-lg bg-background/50 px-3 py-1.5 text-xs text-text placeholder-text-muted/40 outline-none ring-1 ring-surface-light/30 focus:ring-primary/50 mb-2" />
 			<button onclick={joinChannel} class="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark transition">Join</button>
 		</div>
 	{/if}

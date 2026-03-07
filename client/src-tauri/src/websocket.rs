@@ -1288,6 +1288,18 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
                     let mut members_guard = app_state.channel_members.write().await;
                     members_guard.insert(channel_hex.clone(), member_pubkeys.clone());
                 }
+
+                // Cache member roles from members_with_keys
+                if let Some(members_with_keys) = msg.get("members_with_keys").and_then(|v| v.as_array()) {
+                    let mut roles_guard = app_state.member_roles.write().await;
+                    let role_map = roles_guard.entry(channel_hex.clone()).or_default();
+                    for entry in members_with_keys {
+                        if let Some(ed25519) = extract_byte_array_from_value(entry.get("ed25519")) {
+                            let role = entry.get("role").and_then(|v| v.as_str()).unwrap_or("member");
+                            role_map.insert(hex::encode(&ed25519), role.to_string());
+                        }
+                    }
+                }
                 
                 // Consume any explicit pending distribution first
                 let pending_dist = {
@@ -2123,7 +2135,15 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
 
         // Username & search events — pass through to frontend
         "username_set" | "username_result" | "search_results" |
-        "voice_full" => {
+        "voice_full" |
+        // Moderation events
+        "role_set" | "role_updated" | "user_banned" | "user_unbanned" |
+        "banned" | "bans_list" |
+        // Sub-channel events
+        "sub_channel_created" | "sub_channel_deleted" | "sub_channels_list" |
+        "sub_channel_message" | "sub_channel_history" |
+        // Channel password
+        "channel_password_set" | "channel_access_updated" => {
             let _ = app.emit(msg_type, msg.clone());
         }
         

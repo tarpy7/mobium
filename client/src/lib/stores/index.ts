@@ -65,6 +65,23 @@ export const friendsStore = writable<Friend[]>([]);
 /** User search results (from server username directory) */
 export const searchResultsStore = writable<{ pubkey: string; username: string }[]>([]);
 
+/** Sub-channel within a parent channel */
+export interface SubChannel {
+	id: string;
+	name: string;
+	kind: 'text' | 'voice';
+	position: number;
+}
+
+/** Sub-channels per parent channel */
+export const subChannelsStore = writable<Map<string, SubChannel[]>>(new Map());
+
+/** Currently active sub-channel ID (null = main channel) */
+export const activeSubChannelStore = writable<string | null>(null);
+
+/** Bans list for a channel (populated on demand) */
+export const bansStore = writable<{ pubkey: string; reason: string | null }[]>([]);
+
 /** Get display name for a pubkey */
 export function displayName(pubkey: string): string {
 	// 1. Local nickname (highest priority — user explicitly set this)

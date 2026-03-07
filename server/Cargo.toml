@@ -10,6 +10,7 @@ name = "mobium-server"
 path = "src/main.rs"
 
 [dependencies]
+sha2 = "0.10"
 # Web framework
 axum = { version = "0.7", features = ["ws", "http2"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }

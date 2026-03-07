@@ -195,9 +195,65 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
 
     // Username column on users table (optional, unique via index)
     sqlx::query("ALTER TABLE users ADD COLUMN username TEXT")
-        .execute(pool).await.ok(); // ignore if column already exists
+        .execute(pool).await.ok();
     sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL")
         .execute(pool).await?;
+
+    // ── Roles on channel_members: 'owner', 'moderator', 'member' ──
+    sqlx::query("ALTER TABLE channel_members ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
+        .execute(pool).await.ok();
+
+    // ── Bans table ──
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS channel_bans (
+            channel_id BLOB NOT NULL,
+            user_pubkey BLOB NOT NULL,
+            banned_by BLOB NOT NULL,
+            reason TEXT,
+            banned_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            PRIMARY KEY (channel_id, user_pubkey)
+        )
+        "#
+    ).execute(pool).await?;
+
+    // ── Sub-channels (voice and text rooms within a channel) ──
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS sub_channels (
+            id BLOB PRIMARY KEY,
+            channel_id BLOB NOT NULL,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'text',
+            position INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (channel_id) REFERENCES channels(id)
+        )
+        "#
+    ).execute(pool).await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sub_channels_parent ON sub_channels(channel_id)")
+        .execute(pool).await?;
+
+    // ── Sub-channel messages ──
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS sub_channel_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sub_channel_id BLOB NOT NULL,
+            encrypted_payload BLOB NOT NULL,
+            bucket_size INTEGER NOT NULL,
+            timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            sender_pubkey BLOB NOT NULL,
+            FOREIGN KEY (sub_channel_id) REFERENCES sub_channels(id)
+        )
+        "#
+    ).execute(pool).await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sub_msg_time ON sub_channel_messages(sub_channel_id, timestamp)")
+        .execute(pool).await?;
+
+    // ── Channel password (hashed, optional) ──
+    sqlx::query("ALTER TABLE channels ADD COLUMN password_hash TEXT")
+        .execute(pool).await.ok();
 
     info!("Migrations completed successfully");
     Ok(())
@@ -909,4 +965,240 @@ pub async fn consume_invite(
         }
         None => Ok(None),
     }
+}
+
+// ── Roles ────────────────────────────────────────────────────────────
+
+/// Get a member's role in a channel.
+pub async fn get_member_role(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    user_pubkey: &[u8],
+) -> Result<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT role FROM channel_members WHERE channel_id = ?1 AND user_pubkey = ?2"
+    )
+    .bind(channel_id)
+    .bind(user_pubkey)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.0))
+}
+
+/// Set a member's role. Only owner can promote/demote.
+pub async fn set_member_role(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    user_pubkey: &[u8],
+    role: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE channel_members SET role = ?1 WHERE channel_id = ?2 AND user_pubkey = ?3"
+    )
+    .bind(role)
+    .bind(channel_id)
+    .bind(user_pubkey)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+// ── Bans ─────────────────────────────────────────────────────────────
+
+/// Ban a user from a channel.
+pub async fn ban_user(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    user_pubkey: &[u8],
+    banned_by: &[u8],
+    reason: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT OR REPLACE INTO channel_bans (channel_id, user_pubkey, banned_by, reason) VALUES (?1, ?2, ?3, ?4)"
+    )
+    .bind(channel_id)
+    .bind(user_pubkey)
+    .bind(banned_by)
+    .bind(reason)
+    .execute(pool)
+    .await?;
+    // Also remove from channel members
+    sqlx::query("DELETE FROM channel_members WHERE channel_id = ?1 AND user_pubkey = ?2")
+        .bind(channel_id)
+        .bind(user_pubkey)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Unban a user from a channel.
+pub async fn unban_user(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    user_pubkey: &[u8],
+) -> Result<()> {
+    sqlx::query("DELETE FROM channel_bans WHERE channel_id = ?1 AND user_pubkey = ?2")
+        .bind(channel_id)
+        .bind(user_pubkey)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Check if a user is banned from a channel.
+pub async fn is_banned(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    user_pubkey: &[u8],
+) -> Result<bool> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM channel_bans WHERE channel_id = ?1 AND user_pubkey = ?2"
+    )
+    .bind(channel_id)
+    .bind(user_pubkey)
+    .fetch_one(pool)
+    .await?;
+    Ok(count > 0)
+}
+
+/// Get all bans for a channel.
+pub async fn get_bans(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+) -> Result<Vec<(Vec<u8>, Option<String>)>> {
+    let rows: Vec<(Vec<u8>, Option<String>)> = sqlx::query_as(
+        "SELECT user_pubkey, reason FROM channel_bans WHERE channel_id = ?1"
+    )
+    .bind(channel_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+// ── Sub-channels ─────────────────────────────────────────────────────
+
+/// Create a sub-channel (text or voice room) within a parent channel.
+pub async fn create_sub_channel(
+    pool: &Pool<Sqlite>,
+    id: &[u8],
+    channel_id: &[u8],
+    name: &str,
+    kind: &str,
+    position: i64,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO sub_channels (id, channel_id, name, kind, position) VALUES (?1, ?2, ?3, ?4, ?5)"
+    )
+    .bind(id)
+    .bind(channel_id)
+    .bind(name)
+    .bind(kind)
+    .bind(position)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Delete a sub-channel.
+pub async fn delete_sub_channel(
+    pool: &Pool<Sqlite>,
+    id: &[u8],
+) -> Result<()> {
+    sqlx::query("DELETE FROM sub_channel_messages WHERE sub_channel_id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM sub_channels WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// List sub-channels for a parent channel.
+pub async fn get_sub_channels(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+) -> Result<Vec<(Vec<u8>, String, String, i64)>> {
+    let rows: Vec<(Vec<u8>, String, String, i64)> = sqlx::query_as(
+        "SELECT id, name, kind, position FROM sub_channels WHERE channel_id = ?1 ORDER BY position, created_at"
+    )
+    .bind(channel_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Store a message in a sub-channel.
+pub async fn store_sub_channel_message(
+    pool: &Pool<Sqlite>,
+    sub_channel_id: &[u8],
+    encrypted_payload: &[u8],
+    bucket_size: i64,
+    sender_pubkey: &[u8],
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO sub_channel_messages (sub_channel_id, encrypted_payload, bucket_size, sender_pubkey) VALUES (?1, ?2, ?3, ?4)"
+    )
+    .bind(sub_channel_id)
+    .bind(encrypted_payload)
+    .bind(bucket_size)
+    .bind(sender_pubkey)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Get sub-channel message history.
+pub async fn get_sub_channel_history(
+    pool: &Pool<Sqlite>,
+    sub_channel_id: &[u8],
+    limit: i64,
+    before_id: Option<i64>,
+) -> Result<Vec<(i64, Vec<u8>, i64, Vec<u8>, i64)>> {
+    if let Some(bid) = before_id {
+        let rows: Vec<(i64, Vec<u8>, i64, Vec<u8>, i64)> = sqlx::query_as(
+            "SELECT id, encrypted_payload, bucket_size, sender_pubkey, timestamp FROM sub_channel_messages WHERE sub_channel_id = ?1 AND id < ?2 ORDER BY id DESC LIMIT ?3"
+        )
+        .bind(sub_channel_id).bind(bid).bind(limit)
+        .fetch_all(pool).await?;
+        Ok(rows)
+    } else {
+        let rows: Vec<(i64, Vec<u8>, i64, Vec<u8>, i64)> = sqlx::query_as(
+            "SELECT id, encrypted_payload, bucket_size, sender_pubkey, timestamp FROM sub_channel_messages WHERE sub_channel_id = ?1 ORDER BY id DESC LIMIT ?2"
+        )
+        .bind(sub_channel_id).bind(limit)
+        .fetch_all(pool).await?;
+        Ok(rows)
+    }
+}
+
+// ── Channel password ─────────────────────────────────────────────────
+
+/// Set (or clear) the channel join password. Stored as a SHA-256 hash.
+pub async fn set_channel_password(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    password_hash: Option<&str>,
+) -> Result<()> {
+    sqlx::query("UPDATE channels SET password_hash = ?1 WHERE id = ?2")
+        .bind(password_hash)
+        .bind(channel_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Get channel password hash (None if no password set).
+pub async fn get_channel_password_hash(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+) -> Result<Option<String>> {
+    let row: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT password_hash FROM channels WHERE id = ?1"
+    )
+    .bind(channel_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| r.0))
 }

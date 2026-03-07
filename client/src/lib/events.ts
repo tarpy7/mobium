@@ -17,7 +17,10 @@ import {
 	displayName,
 	usernameStore,
 	searchResultsStore,
+	subChannelsStore,
+	bansStore,
 	type Message,
+	type SubChannel,
 } from '$lib/stores';
 
 let listenersSetup = false;
@@ -259,6 +262,97 @@ export async function setupEventListeners() {
 				username: u.username,
 			}));
 			searchResultsStore.set(results);
+		}),
+
+		// ── Moderation events ──────────────────────────────────────────
+
+		listen<{ channel_id: number[]; role: string }>('role_updated', (event) => {
+			const role = event.payload.role;
+			addToast(`Your role has been updated to ${role}`, 'info');
+		}),
+
+		listen<{ channel_id: number[]; reason: string }>('banned', (event) => {
+			const reason = event.payload.reason;
+			addToast(`You have been banned${reason ? ': ' + reason : ''}`, 'error');
+		}),
+
+		listen<{ channel_id: number[]; bans: Array<{ pubkey: number[]; reason: string | null }> }>('bans_list', (event) => {
+			const bans = (event.payload.bans || []).map((b: { pubkey: number[]; reason: string | null }) => ({
+				pubkey: Array.from(b.pubkey).map((v: number) => v.toString(16).padStart(2, '0')).join(''),
+				reason: b.reason,
+			}));
+			bansStore.set(bans);
+		}),
+
+		listen<{ channel_id: number[]; target_pubkey: number[] }>('user_banned', () => {
+			addToast('User has been banned', 'success');
+		}),
+
+		listen<{ channel_id: number[]; target_pubkey: number[] }>('user_unbanned', () => {
+			addToast('User has been unbanned', 'success');
+		}),
+
+		listen<{ channel_id: number[]; target_pubkey: number[]; role: string }>('role_set', (event) => {
+			addToast(`Role updated to ${event.payload.role}`, 'success');
+		}),
+
+		// ── Sub-channel events ─────────────────────────────────────────
+
+		listen<{ channel_id: number[]; sub_channels: Array<{ id: number[]; name: string; kind: string; position: number }> }>('sub_channels_list', (event) => {
+			const channelHex = Array.from(event.payload.channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+			const subs: SubChannel[] = (event.payload.sub_channels || []).map((s: { id: number[]; name: string; kind: string; position: number }) => ({
+				id: Array.from(s.id).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
+				name: s.name,
+				kind: s.kind as 'text' | 'voice',
+				position: s.position,
+			}));
+			subChannelsStore.update(m => { const nm = new Map(m); nm.set(channelHex, subs); return nm; });
+		}),
+
+		listen<{ channel_id: number[]; sub_channel_id: number[]; name: string; kind: string; position: number }>('sub_channel_created', (event) => {
+			const channelHex = Array.from(event.payload.channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+			const sub: SubChannel = {
+				id: Array.from(event.payload.sub_channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
+				name: event.payload.name,
+				kind: event.payload.kind as 'text' | 'voice',
+				position: event.payload.position,
+			};
+			subChannelsStore.update(m => {
+				const nm = new Map(m);
+				const existing = nm.get(channelHex) || [];
+				nm.set(channelHex, [...existing, sub].sort((a, b) => a.position - b.position));
+				return nm;
+			});
+			addToast(`Sub-channel "${sub.name}" created`, 'info');
+		}),
+
+		listen<{ channel_id: number[]; sub_channel_id: number[] }>('sub_channel_deleted', (event) => {
+			const channelHex = Array.from(event.payload.channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+			const subHex = Array.from(event.payload.sub_channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+			subChannelsStore.update(m => {
+				const nm = new Map(m);
+				const existing = nm.get(channelHex) || [];
+				nm.set(channelHex, existing.filter(s => s.id !== subHex));
+				return nm;
+			});
+			addToast('Sub-channel deleted', 'info');
+		}),
+
+		listen<{ channel_id: number[]; has_password: boolean }>('channel_password_set', (event) => {
+			addToast(event.payload.has_password ? 'Channel password set' : 'Channel password cleared', 'success');
+		}),
+
+		// ── Server errors with codes ───────────────────────────────────
+
+		listen<{ message: string; code?: string }>('server_error', (event) => {
+			const { message, code } = event.payload;
+			if (code === 'banned') {
+				addToast(message, 'error');
+			} else if (code === 'password_required') {
+				addToast(message, 'error');
+			} else {
+				addToast(`Server error: ${message}`, 'error');
+			}
 		}),
 
 		// NOTE: voice_signal events are NOT handled here.  They are polled

@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 use tracing::{info, debug, warn, error};
 use futures::{sink::SinkExt, stream::StreamExt};
 
+use sha2::Digest;
 use crate::config::ServerConfig;
 use crate::database;
 use crate::auth::verify_challenge;
@@ -439,6 +440,19 @@ async fn handle_binary_message(
         "set_username" => handle_set_username(&msg, conn, state).await,
         "search_users" => handle_search_users(&msg, conn, state).await,
         "get_username" => handle_get_username(&msg, conn, state).await,
+        // Roles & moderation
+        "set_role" => handle_set_role(&msg, conn, state).await,
+        "ban_user" => handle_ban_user(&msg, conn, state).await,
+        "unban_user" => handle_unban_user(&msg, conn, state).await,
+        "get_bans" => handle_get_bans(&msg, conn, state).await,
+        // Sub-channels
+        "create_sub_channel" => handle_create_sub_channel(&msg, conn, state).await,
+        "delete_sub_channel" => handle_delete_sub_channel(&msg, conn, state).await,
+        "get_sub_channels" => handle_get_sub_channels(&msg, conn, state).await,
+        "sub_channel_message" => handle_sub_channel_message(&msg, conn, state).await,
+        "get_sub_history" => handle_get_sub_history(&msg, conn, state).await,
+        // Channel password
+        "set_channel_password" => handle_set_channel_password(&msg, conn, state).await,
         "ping" => {
             let pong = rmp_serde::to_vec_named(&serde_json::json!({"type": "pong"}))?;
             conn.tx.send(pong).await?;
@@ -635,6 +649,8 @@ async fn handle_create_channel(
         .ok_or_else(|| anyhow::anyhow!("Missing encrypted_metadata"))?;
 
     database::create_channel(&state.db_pool, &channel_id, &encrypted_metadata, creator).await?;
+    // Set creator as owner
+    database::set_member_role(&state.db_pool, &channel_id, creator, "owner").await?;
 
     info!("Channel {} created by {}",
         hex::encode(&channel_id[..8.min(channel_id.len())]),
@@ -661,6 +677,28 @@ async fn handle_join_channel(
     let channel_access = database::get_channel_access(&state.db_pool, &channel_id).await?;
 
     if let Some((access_mode, _creator)) = &channel_access {
+        // Check ban first
+        if database::is_banned(&state.db_pool, &channel_id, &user).await? {
+            let err = rmp_serde::to_vec_named(&serde_json::json!({
+                "type": "error", "code": "banned", "message": "You are banned from this channel",
+            }))?;
+            conn.tx.send(err).await?;
+            return Ok(());
+        }
+
+        // Check channel password if set (client sends pre-hashed SHA-256)
+        let pw_hash = database::get_channel_password_hash(&state.db_pool, &channel_id).await?;
+        if let Some(ref stored_hash) = pw_hash {
+            let provided = msg.get("password").and_then(|v| v.as_str()).unwrap_or("");
+            if provided != stored_hash.as_str() {
+                let err = rmp_serde::to_vec_named(&serde_json::json!({
+                    "type": "error", "code": "password_required", "message": "Incorrect or missing channel password",
+                }))?;
+                conn.tx.send(err).await?;
+                return Ok(());
+            }
+        }
+
         // Channel exists — check access
         if access_mode == "private" {
             // Already a member? Allow rejoin silently
@@ -861,10 +899,15 @@ async fn handle_get_members(
     }
 
     let members_with_keys = database::get_channel_members_with_keys(&state.db_pool, &channel_id).await?;
-    let members_data: Vec<serde_json::Value> = members_with_keys.iter()
-        .map(|(ed, x)| serde_json::json!({"ed25519": ed, "x25519": x}))
-        .collect();
-    let members_flat: Vec<&Vec<u8>> = members_with_keys.iter().map(|(ed, _)| ed).collect();
+    // Build members with role info
+    let mut members_data: Vec<serde_json::Value> = Vec::with_capacity(members_with_keys.len());
+    let mut members_flat: Vec<Vec<u8>> = Vec::with_capacity(members_with_keys.len());
+    for (ed, x) in &members_with_keys {
+        let role = database::get_member_role(&state.db_pool, &channel_id, ed).await?
+            .unwrap_or_else(|| "member".to_string());
+        members_data.push(serde_json::json!({"ed25519": ed, "x25519": x, "role": role}));
+        members_flat.push(ed.clone());
+    }
 
     let response = rmp_serde::to_vec_named(&serde_json::json!({
         "type": "members_response", "channel_id": channel_id,
@@ -1466,4 +1509,488 @@ async fn handle_screen_data_raw(
         }
     }
     Ok(()) // No ack for screen_data — fire and forget
+}
+
+// ── Helper: check if user is owner or moderator ──────────────────────
+
+async fn require_mod_or_owner(
+    state: &Arc<ServerState>,
+    channel_id: &[u8],
+    user: &[u8],
+) -> anyhow::Result<String> {
+    let role = database::get_member_role(&state.db_pool, channel_id, user).await?
+        .unwrap_or_default();
+    if role != "owner" && role != "moderator" {
+        anyhow::bail!("Requires owner or moderator role");
+    }
+    Ok(role)
+}
+
+async fn require_owner(
+    state: &Arc<ServerState>,
+    channel_id: &[u8],
+    user: &[u8],
+) -> anyhow::Result<()> {
+    let role = database::get_member_role(&state.db_pool, channel_id, user).await?
+        .unwrap_or_default();
+    if role != "owner" {
+        anyhow::bail!("Requires owner role");
+    }
+    Ok(())
+}
+
+// ── Set Role (owner only) ────────────────────────────────────────────
+
+async fn handle_set_role(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let target = extract_bytes(msg.get("target_pubkey"))
+        .ok_or_else(|| anyhow::anyhow!("Missing target_pubkey"))?;
+    let role = msg.get("role").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing role"))?;
+
+    if role != "moderator" && role != "member" {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Role must be 'moderator' or 'member'",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    // Only owner can set roles
+    if let Err(_) = require_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only the channel owner can set roles",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    // Can't change own role
+    if target == *user {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Cannot change your own role",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    database::set_member_role(&state.db_pool, &channel_id, &target, role).await?;
+
+    // Notify the target if online
+    if let Some(target_conn) = state.connections.get(&target) {
+        let notif = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "role_updated", "channel_id": channel_id, "role": role,
+        }))?;
+        let _ = target_conn.value().try_send(notif);
+    }
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "role_set", "channel_id": channel_id, "target_pubkey": target, "role": role,
+    }))?;
+    conn.tx.send(response).await?;
+
+    info!("Role set: {} -> {} in channel {}",
+        hex::encode(&target[..8.min(target.len())]),
+        role,
+        hex::encode(&channel_id[..8.min(channel_id.len())]));
+    Ok(())
+}
+
+// ── Ban User (owner or moderator) ────────────────────────────────────
+
+async fn handle_ban_user(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let target = extract_bytes(msg.get("target_pubkey"))
+        .ok_or_else(|| anyhow::anyhow!("Missing target_pubkey"))?;
+    let reason = msg.get("reason").and_then(|v| v.as_str());
+
+    let user_role = match require_mod_or_owner(state, &channel_id, user).await {
+        Ok(r) => r,
+        Err(_) => {
+            let err = rmp_serde::to_vec_named(&serde_json::json!({
+                "type": "error", "message": "Only owner or moderator can ban users",
+            }))?;
+            conn.tx.send(err).await?;
+            return Ok(());
+        }
+    };
+
+    // Check target's role — mods can't ban owners or other mods
+    let target_role = database::get_member_role(&state.db_pool, &channel_id, &target).await?
+        .unwrap_or_default();
+    if target_role == "owner" {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Cannot ban the channel owner",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+    if target_role == "moderator" && user_role != "owner" {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only the owner can ban moderators",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    // Can't ban self
+    if target == *user {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Cannot ban yourself",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    database::ban_user(&state.db_pool, &channel_id, &target, user, reason).await?;
+
+    // Notify target if online
+    if let Some(target_conn) = state.connections.get(&target) {
+        let notif = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "banned", "channel_id": channel_id, "reason": reason.unwrap_or(""),
+        }))?;
+        let _ = target_conn.value().try_send(notif);
+    }
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "user_banned", "channel_id": channel_id, "target_pubkey": target,
+    }))?;
+    conn.tx.send(response).await?;
+
+    info!("Banned {} from channel {} by {}",
+        hex::encode(&target[..8.min(target.len())]),
+        hex::encode(&channel_id[..8.min(channel_id.len())]),
+        hex::encode(&user[..8.min(user.len())]));
+    Ok(())
+}
+
+// ── Unban User (owner or moderator) ──────────────────────────────────
+
+async fn handle_unban_user(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let target = extract_bytes(msg.get("target_pubkey"))
+        .ok_or_else(|| anyhow::anyhow!("Missing target_pubkey"))?;
+
+    if let Err(_) = require_mod_or_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only owner or moderator can unban users",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    database::unban_user(&state.db_pool, &channel_id, &target).await?;
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "user_unbanned", "channel_id": channel_id, "target_pubkey": target,
+    }))?;
+    conn.tx.send(response).await?;
+    Ok(())
+}
+
+// ── Get Bans (owner or moderator) ────────────────────────────────────
+
+async fn handle_get_bans(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+
+    if let Err(_) = require_mod_or_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only owner or moderator can view bans",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    let bans = database::get_bans(&state.db_pool, &channel_id).await?;
+    let ban_list: Vec<serde_json::Value> = bans.into_iter().map(|(pk, reason)| {
+        serde_json::json!({ "pubkey": pk, "reason": reason })
+    }).collect();
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "bans_list", "channel_id": channel_id, "bans": ban_list,
+    }))?;
+    conn.tx.send(response).await?;
+    Ok(())
+}
+
+// ── Create Sub-Channel (owner or moderator) ──────────────────────────
+
+async fn handle_create_sub_channel(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let name = msg.get("name").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing name"))?;
+    let kind = msg.get("kind").and_then(|v| v.as_str()).unwrap_or("text");
+    let position = msg.get("position").and_then(|v| v.as_i64()).unwrap_or(0);
+
+    if kind != "text" && kind != "voice" {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Sub-channel kind must be 'text' or 'voice'",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    if name.len() > 64 || name.is_empty() {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Sub-channel name must be 1-64 characters",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    if let Err(_) = require_mod_or_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only owner or moderator can create sub-channels",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    // Generate random ID
+    let mut id = [0u8; 16];
+    use rand::rngs::OsRng;
+    use rand::RngCore;
+    OsRng.fill_bytes(&mut id);
+
+    database::create_sub_channel(&state.db_pool, &id, &channel_id, name, kind, position).await?;
+
+    // Notify all channel members
+    let members = database::get_channel_members(&state.db_pool, &channel_id).await?;
+    let notif = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "sub_channel_created",
+        "channel_id": channel_id,
+        "sub_channel_id": id.to_vec(),
+        "name": name,
+        "kind": kind,
+        "position": position,
+    }))?;
+    for member_pk in &members {
+        if let Some(c) = state.connections.get(member_pk) {
+            let _ = c.value().try_send(notif.clone());
+        }
+    }
+
+    info!("Sub-channel '{}' ({}) created in channel {}",
+        name, kind, hex::encode(&channel_id[..8.min(channel_id.len())]));
+    Ok(())
+}
+
+// ── Delete Sub-Channel (owner or moderator) ──────────────────────────
+
+async fn handle_delete_sub_channel(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let sub_channel_id = extract_bytes(msg.get("sub_channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing sub_channel_id"))?;
+
+    if let Err(_) = require_mod_or_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only owner or moderator can delete sub-channels",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    database::delete_sub_channel(&state.db_pool, &sub_channel_id).await?;
+
+    // Notify all channel members
+    let members = database::get_channel_members(&state.db_pool, &channel_id).await?;
+    let notif = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "sub_channel_deleted",
+        "channel_id": channel_id,
+        "sub_channel_id": sub_channel_id,
+    }))?;
+    for member_pk in &members {
+        if let Some(c) = state.connections.get(member_pk) {
+            let _ = c.value().try_send(notif.clone());
+        }
+    }
+    Ok(())
+}
+
+// ── Get Sub-Channels ─────────────────────────────────────────────────
+
+async fn handle_get_sub_channels(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let _user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+
+    let subs = database::get_sub_channels(&state.db_pool, &channel_id).await?;
+    let list: Vec<serde_json::Value> = subs.into_iter().map(|(id, name, kind, pos)| {
+        serde_json::json!({ "id": id, "name": name, "kind": kind, "position": pos })
+    }).collect();
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "sub_channels_list", "channel_id": channel_id, "sub_channels": list,
+    }))?;
+    conn.tx.send(response).await?;
+    Ok(())
+}
+
+// ── Sub-Channel Message ──────────────────────────────────────────────
+
+async fn handle_sub_channel_message(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let sender = require_auth(conn)?.clone();
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let sub_channel_id = extract_bytes(msg.get("sub_channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing sub_channel_id"))?;
+    let payload = extract_bytes(msg.get("encrypted_payload"))
+        .ok_or_else(|| anyhow::anyhow!("Missing encrypted_payload"))?;
+    let bucket_size = msg.get("bucket_size").and_then(|v| v.as_i64()).unwrap_or(0);
+
+    // Must be a channel member
+    if !database::is_channel_member(&state.db_pool, &channel_id, &sender).await? {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Not a member of this channel",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    database::store_sub_channel_message(&state.db_pool, &sub_channel_id, &payload, bucket_size, &sender).await?;
+
+    // Fan out to channel members
+    let members = database::get_channel_members(&state.db_pool, &channel_id).await?;
+    let fwd = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "sub_channel_message",
+        "channel_id": channel_id,
+        "sub_channel_id": sub_channel_id,
+        "encrypted_payload": payload,
+        "bucket_size": bucket_size,
+        "sender": sender,
+    }))?;
+    for member_pk in &members {
+        if *member_pk != sender {
+            if let Some(c) = state.connections.get(member_pk) {
+                let _ = c.value().try_send(fwd.clone());
+            }
+        }
+    }
+    Ok(())
+}
+
+// ── Get Sub-Channel History ──────────────────────────────────────────
+
+async fn handle_get_sub_history(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let sub_channel_id = extract_bytes(msg.get("sub_channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing sub_channel_id"))?;
+    let limit = msg.get("limit").and_then(|v| v.as_i64()).unwrap_or(50).min(200);
+    let before_id = msg.get("before_id").and_then(|v| v.as_i64());
+
+    if !database::is_channel_member(&state.db_pool, &channel_id, user).await? {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Not a member of this channel",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    let messages = database::get_sub_channel_history(&state.db_pool, &sub_channel_id, limit, before_id).await?;
+    let list: Vec<serde_json::Value> = messages.into_iter().map(|(id, payload, bs, sender, ts)| {
+        serde_json::json!({
+            "id": id, "encrypted_payload": payload, "bucket_size": bs,
+            "sender": sender, "timestamp": ts,
+        })
+    }).collect();
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "sub_channel_history",
+        "sub_channel_id": sub_channel_id,
+        "messages": list,
+    }))?;
+    conn.tx.send(response).await?;
+    Ok(())
+}
+
+// ── Set Channel Password (owner only) ────────────────────────────────
+
+async fn handle_set_channel_password(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+
+    if let Err(_) = require_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error", "message": "Only the channel owner can set the password",
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    // Client sends pre-hashed SHA-256 — store directly (empty = clear)
+    let password = msg.get("password").and_then(|v| v.as_str()).unwrap_or("");
+    let hash = if password.is_empty() {
+        None
+    } else {
+        Some(password.to_string())
+    };
+
+    database::set_channel_password(&state.db_pool, &channel_id, hash.as_deref()).await?;
+
+    let response = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "channel_password_set",
+        "channel_id": channel_id,
+        "has_password": hash.is_some(),
+    }))?;
+    conn.tx.send(response).await?;
+
+    info!("Channel {} password {}",
+        hex::encode(&channel_id[..8.min(channel_id.len())]),
+        if hash.is_some() { "set" } else { "cleared" });
+    Ok(())
 }

@@ -130,6 +130,16 @@ fn main() {
             commands::add_friend,
             commands::remove_friend,
             commands::get_friends,
+            // Channel moderation & sub-channels
+            commands::set_member_role,
+            commands::ban_user,
+            commands::unban_user,
+            commands::get_bans,
+            commands::create_sub_channel,
+            commands::delete_sub_channel,
+            commands::get_sub_channels,
+            commands::set_channel_password,
+            commands::join_channel_with_password,
             
             // DM / X3DH
             commands::publish_prekeys,
