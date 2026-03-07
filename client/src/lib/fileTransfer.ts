@@ -311,7 +311,16 @@ export async function acceptFileTransfer(transferId: string): Promise<void> {
 							return;
 						}
 					} catch (scanErr) {
-						console.warn('[file] NSFW scan failed, allowing file:', scanErr);
+						console.warn('[file] NSFW scan failed, blocking file for safety:', scanErr);
+						updateTransfer(transferId, {
+							state: 'failed',
+							error: 'Content filter unavailable — file transfers disabled for safety.',
+						});
+						dc.close();
+						pc.close();
+						activeConnections.delete(transferId);
+						activeChannels.delete(transferId);
+						return;
 					}
 
 					updateTransfer(transferId, { state: 'complete', progress: 1, blob });

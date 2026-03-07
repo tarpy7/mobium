@@ -47,6 +47,9 @@ export const nsfwFilterEnabled = writable<boolean>(true);
 /** Filter loading state */
 export const nsfwFilterReady = writable<boolean>(false);
 
+/** Whether the model failed to load (blocks all file transfers when true) */
+export const nsfwFilterFailed = writable<boolean>(false);
+
 export interface NsfwResult {
 	blocked: boolean;
 	reason: string | null;
@@ -92,6 +95,7 @@ async function loadModel(): Promise<nsfwjs.NSFWJS> {
 		return model;
 	} catch (e) {
 		console.error('[nsfw] Failed to load model:', e);
+		nsfwFilterFailed.set(true);
 		throw e;
 	} finally {
 		modelLoading = false;
@@ -111,7 +115,16 @@ export async function classifyImage(
 		return { blocked: false, reason: null, scores: {} };
 	}
 
-	const nsfwModel = await loadModel();
+	if (get(nsfwFilterFailed)) {
+		return { blocked: true, reason: 'Content filter unavailable — file transfers disabled for safety.', scores: {} };
+	}
+
+	let nsfwModel: nsfwjs.NSFWJS;
+	try {
+		nsfwModel = await loadModel();
+	} catch {
+		return { blocked: true, reason: 'Content filter unavailable — file transfers disabled for safety.', scores: {} };
+	}
 	const img = await toImageElement(input);
 
 	const predictions = await nsfwModel.classify(img);
@@ -131,6 +144,9 @@ export async function classifyImageBuffer(buffer: ArrayBuffer, mimeType: string)
 	if (!get(nsfwFilterEnabled)) {
 		return { blocked: false, reason: null, scores: {} };
 	}
+	if (get(nsfwFilterFailed)) {
+		return { blocked: true, reason: 'Content filter unavailable — file transfers disabled for safety.', scores: {} };
+	}
 
 	const blob = new Blob([buffer], { type: mimeType });
 	return classifyImage(blob);
@@ -148,7 +164,16 @@ export async function classifyVideo(input: File | Blob): Promise<NsfwResult> {
 		return { blocked: false, reason: null, scores: {} };
 	}
 
-	const nsfwModel = await loadModel();
+	if (get(nsfwFilterFailed)) {
+		return { blocked: true, reason: 'Content filter unavailable — file transfers disabled for safety.', scores: {} };
+	}
+
+	let nsfwModel: nsfwjs.NSFWJS;
+	try {
+		nsfwModel = await loadModel();
+	} catch {
+		return { blocked: true, reason: 'Content filter unavailable — file transfers disabled for safety.', scores: {} };
+	}
 	const url = URL.createObjectURL(input);
 
 	try {
