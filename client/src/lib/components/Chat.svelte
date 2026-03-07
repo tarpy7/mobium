@@ -18,6 +18,8 @@
 	let showScreenQualityPicker = $state(false);
 	let channelScreenVideoEl = $state<HTMLVideoElement | null>(null);
 	let showChannelScreenShare = $state(true);
+	/** When true, screen share floats as a small PiP in the corner */
+	let screenShareMinimized = $state(false);
 	let dmSessionStatus = $state<'unknown' | 'establishing' | 'active'>('unknown');
 
 	const activeConversation = $derived(
@@ -454,41 +456,99 @@
 		</div>
 	</div>
 
-	<!-- Channel screen share video (always in DOM when in voice, hidden via CSS when no one is sharing) -->
-	{#if activeConversation?.type === 'group' && $channelVoiceStore.channelId === activeConversation?.id}
-		<div class="relative border-b border-border bg-black {$channelVoiceStore.remoteScreenSharer && showChannelScreenShare ? '' : 'hidden'}">
-			<div class="flex items-center justify-between bg-surface-light/50 px-3 py-1.5 text-xs text-text-muted">
-				<div class="flex items-center gap-2">
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-					</svg>
-					{#if $channelVoiceStore.remoteScreenSharer}
-						Screen shared by {displayName($channelVoiceStore.remoteScreenSharer)}
-					{/if}
+	<!-- Channel screen share video -->
+	{#if activeConversation?.type === 'group' && $channelVoiceStore.channelId === activeConversation?.id && $channelVoiceStore.remoteScreenSharer}
+		{#if showChannelScreenShare && !screenShareMinimized}
+			<!-- Full inline screen share -->
+			<div class="relative border-b border-surface-light bg-black">
+				<div class="flex items-center justify-between bg-surface/90 backdrop-blur-sm px-3 py-1.5 text-xs text-text-muted">
+					<div class="flex items-center gap-2">
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+						</svg>
+						<span>Screen shared by <strong class="text-text">{displayName($channelVoiceStore.remoteScreenSharer)}</strong></span>
+					</div>
+					<div class="flex items-center gap-1">
+						<!-- Minimize to PiP -->
+						<button
+							onclick={() => { screenShareMinimized = true; }}
+							class="rounded p-1 text-text-muted hover:text-text hover:bg-surface-light/50 transition"
+							title="Minimize to picture-in-picture"
+						>
+							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0l-4-4m4 4l-4 4" />
+							</svg>
+						</button>
+						<!-- Close -->
+						<button
+							onclick={() => { showChannelScreenShare = false; screenShareMinimized = false; }}
+							class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition"
+							title="Close screen share"
+						>
+							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
 				</div>
-				<button
-					onclick={() => { showChannelScreenShare = false; }}
-					class="text-text-muted hover:text-text transition p-0.5"
-					title="Hide screen share"
-				>
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
+				<!-- svelte-ignore non_reactive_update -->
+				<video
+					bind:this={channelScreenVideoEl}
+					class="max-h-[60vh] w-full object-contain cursor-pointer"
+					autoplay
+					playsinline
+					muted
+					ondblclick={() => { screenShareMinimized = true; }}
+					title="Double-click to minimize"
+				></video>
 			</div>
-			<!-- svelte-ignore non_reactive_update -->
-			<video
-				bind:this={channelScreenVideoEl}
-				class="max-h-[60vh] w-full object-contain"
-				autoplay
-				playsinline
-				muted
-			></video>
-		</div>
-		{#if $channelVoiceStore.remoteScreenSharer && !showChannelScreenShare}
-			<div class="border-b border-border px-3 py-1.5">
+		{:else if showChannelScreenShare && screenShareMinimized}
+			<!-- Minimized PiP floating in bottom-right corner -->
+			<div class="fixed bottom-20 right-4 z-50 w-72 rounded-xl overflow-hidden shadow-2xl border border-surface-light/60 bg-black group">
+				<!-- svelte-ignore non_reactive_update -->
+				<video
+					bind:this={channelScreenVideoEl}
+					class="w-full object-contain cursor-pointer"
+					autoplay
+					playsinline
+					muted
+					ondblclick={() => { screenShareMinimized = false; }}
+					title="Double-click to expand"
+				></video>
+				<!-- Hover controls overlay -->
+				<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+					<div class="absolute top-1.5 right-1.5 flex gap-1 pointer-events-auto">
+						<!-- Expand -->
+						<button
+							onclick={() => { screenShareMinimized = false; }}
+							class="rounded-full bg-black/60 p-1.5 text-white/80 hover:text-white hover:bg-black/80 transition"
+							title="Expand"
+						>
+							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+							</svg>
+						</button>
+						<!-- Close -->
+						<button
+							onclick={() => { showChannelScreenShare = false; screenShareMinimized = false; }}
+							class="rounded-full bg-black/60 p-1.5 text-white/80 hover:text-danger hover:bg-black/80 transition"
+							title="Close"
+						>
+							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+					<div class="absolute bottom-1.5 left-2 pointer-events-none">
+						<span class="text-white/70 text-xs">{displayName($channelVoiceStore.remoteScreenSharer)}</span>
+					</div>
+				</div>
+			</div>
+		{:else}
+			<!-- Hidden — show "reopen" banner -->
+			<div class="border-b border-surface-light px-3 py-1.5">
 				<button
-					onclick={() => { showChannelScreenShare = true; }}
+					onclick={() => { showChannelScreenShare = true; screenShareMinimized = false; }}
 					class="flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25 transition"
 				>
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
