@@ -124,11 +124,10 @@ fn main() {
             commands::get_nicknames,
             commands::get_last_server,
             
-            // Username & friends
+            // Username & friends (friends stored locally, never on server)
             commands::set_username,
             commands::search_users,
-            commands::send_friend_request,
-            commands::accept_friend_request,
+            commands::add_friend,
             commands::remove_friend,
             commands::get_friends,
             

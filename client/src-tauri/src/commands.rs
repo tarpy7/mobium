@@ -1692,93 +1692,36 @@ pub async fn search_users(
     Ok(())
 }
 
-/// Send a friend request to a user by pubkey.
+/// Add a friend locally (client-side storage only, server never sees your friend list).
 #[tauri::command]
-pub async fn send_friend_request(
-    target_pubkey: String,
+pub async fn add_friend(
+    pubkey: String,
+    username: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let pubkey_bytes = crate::validate::validate_pubkey_hex(&target_pubkey)?;
-
-    let conn = {
-        let conn_guard = state.connection.read().await;
-        match conn_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("Not connected to server".to_string()),
-        }
-    };
-
-    let msg = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_request", "target_pubkey": pubkey_bytes,
-    })).map_err(|e| e.to_string())?;
-    conn.send(msg).await.map_err(|e| e.to_string())?;
-    Ok(())
+    crate::validate::validate_pubkey_hex(&pubkey)?;
+    db::add_friend(&state, &pubkey, username.as_deref()).await
+        .map_err(|e| e.to_string())
 }
 
-/// Accept a friend request.
-#[tauri::command]
-pub async fn accept_friend_request(
-    friend_pubkey: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let pubkey_bytes = crate::validate::validate_pubkey_hex(&friend_pubkey)?;
-
-    let conn = {
-        let conn_guard = state.connection.read().await;
-        match conn_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("Not connected to server".to_string()),
-        }
-    };
-
-    let msg = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_accept", "friend_pubkey": pubkey_bytes,
-    })).map_err(|e| e.to_string())?;
-    conn.send(msg).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Remove a friend.
+/// Remove a friend locally.
 #[tauri::command]
 pub async fn remove_friend(
-    friend_pubkey: String,
+    pubkey: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let pubkey_bytes = crate::validate::validate_pubkey_hex(&friend_pubkey)?;
-
-    let conn = {
-        let conn_guard = state.connection.read().await;
-        match conn_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("Not connected to server".to_string()),
-        }
-    };
-
-    let msg = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_remove", "friend_pubkey": pubkey_bytes,
-    })).map_err(|e| e.to_string())?;
-    conn.send(msg).await.map_err(|e| e.to_string())?;
-    Ok(())
+    crate::validate::validate_pubkey_hex(&pubkey)?;
+    db::remove_friend(&state, &pubkey).await
+        .map_err(|e| e.to_string())
 }
 
-/// Request friends list from server.
+/// Get all friends from local storage.
 #[tauri::command]
 pub async fn get_friends(
     state: State<'_, AppState>,
-) -> Result<(), String> {
-    let conn = {
-        let conn_guard = state.connection.read().await;
-        match conn_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("Not connected to server".to_string()),
-        }
-    };
-
-    let msg = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "get_friends",
-    })).map_err(|e| e.to_string())?;
-    conn.send(msg).await.map_err(|e| e.to_string())?;
-    Ok(())
+) -> Result<Vec<(String, Option<String>)>, String> {
+    db::get_friends(&state).await
+        .map_err(|e| e.to_string())
 }
 
 // ─── Voice Calling ──────────────────────────────────────────────────────────

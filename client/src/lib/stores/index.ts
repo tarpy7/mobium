@@ -53,18 +53,16 @@ export const usernameStore = writable<string | null>(null);
 /** Nickname map: pubkey -> display name */
 export const nicknamesStore = writable<Map<string, string>>(new Map());
 
-/** Friend entry */
+/** Friend entry (stored locally, never on server) */
 export interface Friend {
 	pubkey: string;
 	username: string | null;
-	status: 'pending' | 'outgoing' | 'accepted';
-	online: boolean;
 }
 
-/** Friends list from server */
+/** Friends list (local storage) */
 export const friendsStore = writable<Friend[]>([]);
 
-/** User search results */
+/** User search results (from server username directory) */
 export const searchResultsStore = writable<{ pubkey: string; username: string }[]>([]);
 
 /** Get display name for a pubkey */

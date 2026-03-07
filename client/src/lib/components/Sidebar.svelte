@@ -18,12 +18,17 @@
 	let friendSearchLoading = $state(false);
 	let friendSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// Load friends on mount
+	// Load friends from local DB on mount
 	$effect(() => {
-		if ($connectionStore.connected) {
-			invoke('get_friends').catch(() => {});
-		}
+		loadFriends();
 	});
+
+	async function loadFriends() {
+		try {
+			const list: [string, string | null][] = await invoke('get_friends');
+			friendsStore.set(list.map(([pubkey, username]) => ({ pubkey, username })));
+		} catch (e) { console.error('get_friends error:', e); }
+	}
 
 	function searchForFriends() {
 		if (friendSearch.trim().length < 2) {
@@ -40,25 +45,19 @@
 		}, 300);
 	}
 
-	async function sendFriendReq(pubkey: string) {
+	async function addFriend(pubkey: string, username: string | null) {
 		try {
-			await invoke('send_friend_request', { targetPubkey: pubkey });
+			await invoke('add_friend', { pubkey, username });
+			await loadFriends();
 		} catch (e) {
-			console.error('friend request error:', e);
-		}
-	}
-
-	async function acceptReq(pubkey: string) {
-		try {
-			await invoke('accept_friend_request', { friendPubkey: pubkey });
-		} catch (e) {
-			console.error('accept friend error:', e);
+			console.error('add friend error:', e);
 		}
 	}
 
 	async function removeFriend(pubkey: string) {
 		try {
-			await invoke('remove_friend', { friendPubkey: pubkey });
+			await invoke('remove_friend', { pubkey });
+			await loadFriends();
 		} catch (e) {
 			console.error('remove friend error:', e);
 		}
@@ -316,7 +315,7 @@
 			</div>
 
 			<div class="flex-1 overflow-y-auto">
-				<!-- Search results -->
+				<!-- Search results (from server username directory) -->
 				{#if friendSearch.trim().length >= 2}
 					<div class="px-3 py-2">
 						<div class="text-xs text-text-muted/60 mb-1.5">Search results</div>
@@ -331,13 +330,15 @@
 										<div class="text-xs font-medium text-text">{user.username}</div>
 										<div class="text-xs text-text-muted/50 font-mono">{user.pubkey.slice(0, 12)}…</div>
 									</div>
-									{#if user.pubkey !== $identityStore.pubkey}
+									{#if user.pubkey === $identityStore.pubkey}
+										<span class="text-xs text-text-muted/40">You</span>
+									{:else if $friendsStore.some(f => f.pubkey === user.pubkey)}
+										<span class="text-xs text-accent">Added ✓</span>
+									{:else}
 										<button
-											onclick={() => sendFriendReq(user.pubkey)}
+											onclick={() => addFriend(user.pubkey, user.username)}
 											class="rounded-lg bg-primary/15 px-2 py-0.5 text-xs text-primary hover:bg-primary/25 transition"
 										>Add</button>
-									{:else}
-										<span class="text-xs text-text-muted/40">You</span>
 									{/if}
 								</div>
 							{/each}
@@ -345,33 +346,13 @@
 					</div>
 				{/if}
 
-				<!-- Incoming requests -->
-				{#if $friendsStore.filter(f => f.status === 'pending').length > 0}
-					<div class="px-3 py-2 border-t border-surface-light/20">
-						<div class="text-xs text-text-muted/60 mb-1.5">Friend Requests</div>
-						{#each $friendsStore.filter(f => f.status === 'pending') as friend}
-							<div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-surface-light/30 transition">
-								<div>
-									<div class="text-xs font-medium text-text">{friend.username || friend.pubkey.slice(0, 12) + '…'}</div>
-								</div>
-								<div class="flex gap-1">
-									<button onclick={() => acceptReq(friend.pubkey)}
-										class="rounded-lg bg-accent/15 px-2 py-0.5 text-xs text-accent hover:bg-accent/25 transition">Accept</button>
-									<button onclick={() => removeFriend(friend.pubkey)}
-										class="rounded-lg bg-danger/15 px-2 py-0.5 text-xs text-danger hover:bg-danger/25 transition">✕</button>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-
-				<!-- Accepted friends -->
-				<div class="px-3 py-2 border-t border-surface-light/20">
-					<div class="text-xs text-text-muted/60 mb-1.5">Friends</div>
-					{#if $friendsStore.filter(f => f.status === 'accepted').length === 0}
-						<div class="text-xs text-text-muted py-2 text-center">No friends yet. Search for users above.</div>
+				<!-- Your friends (stored locally) -->
+				<div class="px-3 py-2 {friendSearch.trim().length >= 2 ? 'border-t border-surface-light/20' : ''}">
+					<div class="text-xs text-text-muted/60 mb-1.5">Your Friends</div>
+					{#if $friendsStore.length === 0}
+						<div class="text-xs text-text-muted py-3 text-center">No friends yet. Search by username above to add people.</div>
 					{:else}
-						{#each $friendsStore.filter(f => f.status === 'accepted') as friend}
+						{#each $friendsStore as friend}
 							<div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-light/30 transition">
 								<button
 									onclick={() => {
@@ -380,23 +361,18 @@
 									}}
 									class="flex items-center gap-2 flex-1 min-w-0 text-left"
 								>
-									<div class="relative">
-										<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">
-											{(friend.username || friend.pubkey)[0]?.toUpperCase()}
-										</div>
-										{#if friend.online}
-											<div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent border-2 border-surface"></div>
-										{/if}
+									<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">
+										{(friend.username || friend.pubkey)[0]?.toUpperCase()}
 									</div>
 									<div class="flex-1 min-w-0">
 										<div class="text-xs font-medium text-text truncate">{friend.username || friend.pubkey.slice(0, 12) + '…'}</div>
-										<div class="text-xs text-text-muted/50">{friend.online ? 'Online' : 'Offline'}</div>
+										<div class="text-xs text-text-muted/50 font-mono">{friend.pubkey.slice(0, 12)}…</div>
 									</div>
 								</button>
 								<button
 									onclick={() => removeFriend(friend.pubkey)}
 									class="text-text-muted/30 hover:text-danger transition p-0.5"
-									title="Remove friend"
+									title="Remove"
 								>
 									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
 								</button>
@@ -404,19 +380,6 @@
 						{/each}
 					{/if}
 				</div>
-
-				<!-- Outgoing requests -->
-				{#if $friendsStore.filter(f => f.status === 'outgoing').length > 0}
-					<div class="px-3 py-2 border-t border-surface-light/20">
-						<div class="text-xs text-text-muted/60 mb-1.5">Pending</div>
-						{#each $friendsStore.filter(f => f.status === 'outgoing') as friend}
-							<div class="flex items-center justify-between rounded-lg px-2 py-1.5">
-								<div class="text-xs text-text-muted">{friend.username || friend.pubkey.slice(0, 12) + '…'}</div>
-								<span class="text-xs text-text-muted/40">Sent</span>
-							</div>
-						{/each}
-					</div>
-				{/if}
 			</div>
 		</div>
 	{/if}

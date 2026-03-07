@@ -193,28 +193,11 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Username column on users table (unique, optional)
-    sqlx::query("ALTER TABLE users ADD COLUMN username TEXT UNIQUE")
-        .execute(pool).await.ok();
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+    // Username column on users table (optional, unique via index)
+    sqlx::query("ALTER TABLE users ADD COLUMN username TEXT")
+        .execute(pool).await.ok(); // ignore if column already exists
+    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL")
         .execute(pool).await?;
-
-    // Friends table — bidirectional friendship with status
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS friends (
-            user_pubkey BLOB NOT NULL,
-            friend_pubkey BLOB NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-            PRIMARY KEY (user_pubkey, friend_pubkey),
-            FOREIGN KEY (user_pubkey) REFERENCES users(pubkey),
-            FOREIGN KEY (friend_pubkey) REFERENCES users(pubkey)
-        );
-        "#
-    )
-    .execute(pool)
-    .await?;
 
     info!("Migrations completed successfully");
     Ok(())
@@ -286,92 +269,7 @@ pub async fn get_username(
     Ok(row.and_then(|r| r.0))
 }
 
-// ── Friend operations ────────────────────────────────────────────────
 
-/// Send a friend request (creates pending entry for both directions).
-pub async fn send_friend_request(
-    pool: &Pool<Sqlite>,
-    from_pubkey: &[u8],
-    to_pubkey: &[u8],
-) -> Result<()> {
-    // Requester's row: outgoing
-    sqlx::query(
-        "INSERT OR IGNORE INTO friends (user_pubkey, friend_pubkey, status) VALUES (?1, ?2, 'outgoing')"
-    )
-    .bind(from_pubkey)
-    .bind(to_pubkey)
-    .execute(pool)
-    .await?;
-
-    // Recipient's row: pending (incoming)
-    sqlx::query(
-        "INSERT OR IGNORE INTO friends (user_pubkey, friend_pubkey, status) VALUES (?1, ?2, 'pending')"
-    )
-    .bind(to_pubkey)
-    .bind(from_pubkey)
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-/// Accept a friend request (set both directions to 'accepted').
-pub async fn accept_friend_request(
-    pool: &Pool<Sqlite>,
-    user_pubkey: &[u8],
-    friend_pubkey: &[u8],
-) -> Result<()> {
-    sqlx::query(
-        "UPDATE friends SET status = 'accepted' WHERE user_pubkey = ?1 AND friend_pubkey = ?2 AND status = 'pending'"
-    )
-    .bind(user_pubkey)
-    .bind(friend_pubkey)
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        "UPDATE friends SET status = 'accepted' WHERE user_pubkey = ?1 AND friend_pubkey = ?2 AND status = 'outgoing'"
-    )
-    .bind(friend_pubkey)
-    .bind(user_pubkey)
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-/// Remove a friend or reject/cancel a request.
-pub async fn remove_friend(
-    pool: &Pool<Sqlite>,
-    user_pubkey: &[u8],
-    friend_pubkey: &[u8],
-) -> Result<()> {
-    sqlx::query("DELETE FROM friends WHERE user_pubkey = ?1 AND friend_pubkey = ?2")
-        .bind(user_pubkey).bind(friend_pubkey).execute(pool).await?;
-    sqlx::query("DELETE FROM friends WHERE user_pubkey = ?1 AND friend_pubkey = ?2")
-        .bind(friend_pubkey).bind(user_pubkey).execute(pool).await?;
-    Ok(())
-}
-
-/// Get all friends for a user (with status and username).
-pub async fn get_friends(
-    pool: &Pool<Sqlite>,
-    user_pubkey: &[u8],
-) -> Result<Vec<(Vec<u8>, String, Option<String>)>> {
-    // Returns: (friend_pubkey, status, username)
-    let rows: Vec<(Vec<u8>, String, Option<String>)> = sqlx::query_as(
-        r#"
-        SELECT f.friend_pubkey, f.status, u.username
-        FROM friends f
-        LEFT JOIN users u ON u.pubkey = f.friend_pubkey
-        WHERE f.user_pubkey = ?1
-        "#
-    )
-    .bind(user_pubkey)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
-}
 
 /// Store (or update) a user's pre-key bundle for X3DH key agreement.
 ///

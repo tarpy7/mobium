@@ -439,10 +439,6 @@ async fn handle_binary_message(
         "set_username" => handle_set_username(&msg, conn, state).await,
         "search_users" => handle_search_users(&msg, conn, state).await,
         "get_username" => handle_get_username(&msg, conn, state).await,
-        "friend_request" => handle_friend_request(&msg, conn, state).await,
-        "friend_accept" => handle_friend_accept(&msg, conn, state).await,
-        "friend_remove" => handle_friend_remove(&msg, conn, state).await,
-        "get_friends" => handle_get_friends(conn, state).await,
         "ping" => {
             let pong = rmp_serde::to_vec_named(&serde_json::json!({"type": "pong"}))?;
             conn.tx.send(pong).await?;
@@ -1151,107 +1147,6 @@ async fn handle_search_users(
     Ok(())
 }
 
-async fn handle_friend_request(
-    msg: &serde_json::Value,
-    conn: &Connection,
-    state: &Arc<ServerState>,
-) -> anyhow::Result<()> {
-    let sender = require_auth(conn)?;
-    let target_pubkey = extract_bytes(msg.get("target_pubkey"))
-        .ok_or_else(|| anyhow::anyhow!("Missing target_pubkey"))?;
-
-    if &target_pubkey == sender {
-        anyhow::bail!("Cannot add yourself as a friend");
-    }
-
-    database::send_friend_request(&state.db_pool, sender, &target_pubkey).await?;
-
-    // Notify the target if they're online
-    let notif = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_request_received",
-        "from_pubkey": sender,
-        "from_username": database::get_username(&state.db_pool, sender).await.unwrap_or(None),
-    }))?;
-    if let Some(entry) = state.connections.get(&target_pubkey) {
-        let _ = entry.value().try_send(notif);
-    }
-
-    let resp = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_request_sent", "target_pubkey": target_pubkey,
-    }))?;
-    conn.tx.send(resp).await?;
-    info!("Friend request: {} → {}", hex::encode(&sender[..8.min(sender.len())]), hex::encode(&target_pubkey[..8.min(target_pubkey.len())]));
-    Ok(())
-}
-
-async fn handle_friend_accept(
-    msg: &serde_json::Value,
-    conn: &Connection,
-    state: &Arc<ServerState>,
-) -> anyhow::Result<()> {
-    let sender = require_auth(conn)?;
-    let friend_pubkey = extract_bytes(msg.get("friend_pubkey"))
-        .ok_or_else(|| anyhow::anyhow!("Missing friend_pubkey"))?;
-
-    database::accept_friend_request(&state.db_pool, sender, &friend_pubkey).await?;
-
-    // Notify the friend if online
-    let notif = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_accepted",
-        "pubkey": sender,
-        "username": database::get_username(&state.db_pool, sender).await.unwrap_or(None),
-    }))?;
-    if let Some(entry) = state.connections.get(&friend_pubkey) {
-        let _ = entry.value().try_send(notif);
-    }
-
-    let resp = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_accept_ok", "friend_pubkey": friend_pubkey,
-    }))?;
-    conn.tx.send(resp).await?;
-    Ok(())
-}
-
-async fn handle_friend_remove(
-    msg: &serde_json::Value,
-    conn: &Connection,
-    state: &Arc<ServerState>,
-) -> anyhow::Result<()> {
-    let sender = require_auth(conn)?;
-    let friend_pubkey = extract_bytes(msg.get("friend_pubkey"))
-        .ok_or_else(|| anyhow::anyhow!("Missing friend_pubkey"))?;
-
-    database::remove_friend(&state.db_pool, sender, &friend_pubkey).await?;
-
-    let resp = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friend_removed", "friend_pubkey": friend_pubkey,
-    }))?;
-    conn.tx.send(resp).await?;
-    Ok(())
-}
-
-async fn handle_get_friends(
-    conn: &Connection,
-    state: &Arc<ServerState>,
-) -> anyhow::Result<()> {
-    let sender = require_auth(conn)?;
-    let friends = database::get_friends(&state.db_pool, sender).await?;
-
-    let list: Vec<serde_json::Value> = friends.into_iter().map(|(pubkey, status, username)| {
-        serde_json::json!({
-            "pubkey": pubkey,
-            "status": status,
-            "username": username,
-            "online": state.connections.contains_key(&pubkey),
-        })
-    }).collect();
-
-    let resp = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "friends_list", "friends": list,
-    }))?;
-    conn.tx.send(resp).await?;
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------
 // ICE configuration (server-provided STUN/TURN)

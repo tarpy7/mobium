@@ -190,6 +190,19 @@ async fn migrate_v1(pool: &Pool<Sqlite>) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Friends list — stored locally, never sent to the server
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS friends (
+            pubkey TEXT PRIMARY KEY,
+            username TEXT,
+            added_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        )
+        "#
+    )
+    .execute(pool)
+    .await?;
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS ratchet_sessions (
@@ -668,6 +681,54 @@ pub async fn get_all_nicknames(state: &AppState) -> Result<Vec<(String, String)>
     }
     
     Ok(result)
+}
+
+// ─── Friends (local-only, never touches server) ─────────────────────────────
+
+/// Add a friend to the local database.
+pub async fn add_friend(state: &AppState, pubkey: &str, username: Option<&str>) -> Result<()> {
+    let db_guard = state.db.read().await;
+    let pool = db_guard.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
+
+    sqlx::query(
+        "INSERT OR REPLACE INTO friends (pubkey, username) VALUES (?1, ?2)"
+    )
+    .bind(pubkey)
+    .bind(username)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Remove a friend from the local database.
+pub async fn remove_friend(state: &AppState, pubkey: &str) -> Result<()> {
+    let db_guard = state.db.read().await;
+    let pool = db_guard.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
+
+    sqlx::query("DELETE FROM friends WHERE pubkey = ?1")
+        .bind(pubkey)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+/// Get all friends from the local database.
+pub async fn get_friends(state: &AppState) -> Result<Vec<(String, Option<String>)>> {
+    let db_guard = state.db.read().await;
+    let pool = db_guard.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
+
+    let rows: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT pubkey, username FROM friends ORDER BY added_at DESC"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
 }
 
 // ─── App Settings ───────────────────────────────────────────────────────────
