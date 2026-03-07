@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import { createEventDispatcher } from 'svelte';
-	import { connectionStore, conversationsStore, activeConversationStore, upsertConversation, identityStore, sidebarFilterStore, friendsStore, searchResultsStore, usernameStore } from '$lib/stores';
+	import { connectionStore, conversationsStore, activeConversationStore, upsertConversation, identityStore, sidebarFilterStore, friendsStore, searchResultsStore, usernameStore, addToast } from '$lib/stores';
 	import type { SidebarFilter, Friend } from '$lib/stores';
 	import UserList from './UserList.svelte';
 	import { nsfwFilterEnabled } from '$lib/nsfwFilter';
@@ -92,10 +92,15 @@
 	async function createChannel() {
 		if (!channelName.trim()) return;
 		try {
-			await invoke('create_channel', { name: channelName.trim() });
+			const channelId = await invoke<string>('create_channel', { channelName: channelName.trim() });
+			upsertConversation({ id: channelId, name: channelName.trim(), type: 'group', unreadCount: 0 });
+			activeConversationStore.set(channelId);
 			channelName = '';
 			showCreateChannel = false;
-		} catch (e) { console.error('Failed to create channel:', e); }
+		} catch (e) {
+			console.error('Failed to create channel:', e);
+			addToast(`Failed to create channel: ${e}`, 'error');
+		}
 	}
 
 	async function joinChannel() {
@@ -114,7 +119,10 @@
 			joinChannelName = '';
 			joinChannelPassword = '';
 			showJoinChannel = false;
-		} catch (e) { console.error('Failed to join channel:', e); }
+		} catch (e) {
+			console.error('Failed to join channel:', e);
+			addToast(`Failed to join channel: ${e}`, 'error');
+		}
 	}
 
 	function createGroupDm() {
