@@ -57,9 +57,12 @@
 	}
 
 	function getMemberDisplayName(member: ChannelMember): string {
-		// Priority: local nickname > server nickname > truncated pubkey
+		// Priority: local nickname > username (from friends/member) > truncated pubkey
 		const localNick = $nicknamesStore.get(member.pubkey);
 		if (localNick) return localNick;
+		// Check friends list for username
+		const friend = $friendsStore.find(f => f.pubkey === member.pubkey);
+		if (friend?.username) return friend.username;
 		if (member.nickname) return member.nickname;
 		return member.pubkey.length > 16
 			? `${member.pubkey.substring(0, 8)}…${member.pubkey.substring(member.pubkey.length - 8)}`

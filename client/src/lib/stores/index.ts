@@ -67,10 +67,23 @@ export const searchResultsStore = writable<{ pubkey: string; username: string }[
 
 /** Get display name for a pubkey */
 export function displayName(pubkey: string): string {
+	// 1. Local nickname (highest priority — user explicitly set this)
 	const nicknames = get(nicknamesStore);
 	const nick = nicknames.get(pubkey);
 	if (nick) return nick;
+	// 2. Username from friends list
+	const friends = get(friendsStore);
+	const friend = friends.find(f => f.pubkey === pubkey);
+	if (friend?.username) return friend.username;
+	// 3. Own username
 	if (pubkey === 'self') return 'You';
+	const ownPubkey = get(identityStore)?.pubkey;
+	if (ownPubkey && pubkey === ownPubkey) {
+		const ownUsername = get(usernameStore);
+		if (ownUsername) return ownUsername;
+		return 'You';
+	}
+	// 4. Fallback to truncated pubkey
 	if (pubkey.length > 16) return `${pubkey.substring(0, 6)}...${pubkey.substring(pubkey.length - 4)}`;
 	return pubkey;
 }
