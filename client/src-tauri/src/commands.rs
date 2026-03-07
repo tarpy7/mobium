@@ -1633,6 +1633,154 @@ pub async fn get_nicknames(state: State<'_, AppState>) -> Result<Vec<(String, St
         .map_err(|e| e.to_string())
 }
 
+// ─── Username & Friends ─────────────────────────────────────────────────────
+
+/// Set the current user's username on the server.
+#[tauri::command]
+pub async fn set_username(
+    username: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let trimmed = username.trim();
+    if trimmed.len() < 3 || trimmed.len() > 24 {
+        return Err("Username must be 3-24 characters".to_string());
+    }
+    if !trimmed.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+        return Err("Username must start with a letter".to_string());
+    }
+    if !trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err("Username can only contain letters, numbers, and underscores".to_string());
+    }
+
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "set_username", "username": trimmed,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Search for users by username.
+#[tauri::command]
+pub async fn search_users(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if query.trim().len() < 2 {
+        return Err("Search query must be at least 2 characters".to_string());
+    }
+
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "search_users", "query": query.trim(),
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Send a friend request to a user by pubkey.
+#[tauri::command]
+pub async fn send_friend_request(
+    target_pubkey: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pubkey_bytes = crate::validate::validate_pubkey_hex(&target_pubkey)?;
+
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "friend_request", "target_pubkey": pubkey_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Accept a friend request.
+#[tauri::command]
+pub async fn accept_friend_request(
+    friend_pubkey: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pubkey_bytes = crate::validate::validate_pubkey_hex(&friend_pubkey)?;
+
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "friend_accept", "friend_pubkey": pubkey_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Remove a friend.
+#[tauri::command]
+pub async fn remove_friend(
+    friend_pubkey: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pubkey_bytes = crate::validate::validate_pubkey_hex(&friend_pubkey)?;
+
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "friend_remove", "friend_pubkey": pubkey_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Request friends list from server.
+#[tauri::command]
+pub async fn get_friends(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = {
+        let conn_guard = state.connection.read().await;
+        match conn_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("Not connected to server".to_string()),
+        }
+    };
+
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_friends",
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ─── Voice Calling ──────────────────────────────────────────────────────────
 
 /// Send a voice signaling message (WebRTC SDP offer/answer or ICE candidate)

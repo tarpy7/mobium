@@ -15,7 +15,11 @@ import {
 	identityStore,
 	activeConversationStore,
 	displayName,
-	type Message
+	usernameStore,
+	friendsStore,
+	searchResultsStore,
+	type Message,
+	type Friend,
 } from '$lib/stores';
 
 let listenersSetup = false;
@@ -240,6 +244,60 @@ export async function setupEventListeners() {
 		// Server error
 		listen<{ message: string }>('server_error', (event) => {
 			console.error('[event] server_error:', event.payload.message);
+		}),
+
+		// ── Username & friends events ──────────────────────────
+
+		listen<{ username: string }>('username_set', (event) => {
+			const username = event.payload.username;
+			usernameStore.set(username);
+			console.log('[event] Username set:', username);
+			addToast(`Username set: ${username}`, 'success');
+		}),
+
+		listen<{ users: Array<{ pubkey: number[]; username: string }> }>('search_results', (event) => {
+			const results = (event.payload.users || []).map((u: { pubkey: number[]; username: string }) => ({
+				pubkey: Array.from(u.pubkey).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
+				username: u.username,
+			}));
+			searchResultsStore.set(results);
+		}),
+
+		listen<{ friends: Array<{ pubkey: number[]; status: string; username: string | null; online: boolean }> }>('friends_list', (event) => {
+			const friends: Friend[] = (event.payload.friends || []).map((f: { pubkey: number[]; status: string; username: string | null; online: boolean }) => ({
+				pubkey: Array.from(f.pubkey).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
+				status: f.status as Friend['status'],
+				username: f.username,
+				online: f.online,
+			}));
+			friendsStore.set(friends);
+		}),
+
+		listen<{ from_pubkey: number[]; from_username: string | null }>('friend_request_received', (event) => {
+			const fromHex = Array.from(event.payload.from_pubkey).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+			const name = event.payload.from_username || fromHex.slice(0, 12) + '…';
+			addToast(`Friend request from ${name}`, 'info');
+			// Refresh friends list
+			invoke('get_friends').catch(() => {});
+		}),
+
+		listen<{ pubkey: number[]; username: string | null }>('friend_accepted', (event) => {
+			const name = event.payload.username || 'Someone';
+			addToast(`${name} accepted your friend request!`, 'success');
+			invoke('get_friends').catch(() => {});
+		}),
+
+		listen<{}>('friend_request_sent', () => {
+			addToast('Friend request sent', 'success');
+		}),
+
+		listen<{}>('friend_accept_ok', () => {
+			addToast('Friend request accepted', 'success');
+			invoke('get_friends').catch(() => {});
+		}),
+
+		listen<{}>('friend_removed', () => {
+			invoke('get_friends').catch(() => {});
 		}),
 
 		// NOTE: voice_signal events are NOT handled here.  They are polled

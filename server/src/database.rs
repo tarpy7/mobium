@@ -193,8 +193,184 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Username column on users table (unique, optional)
+    sqlx::query("ALTER TABLE users ADD COLUMN username TEXT UNIQUE")
+        .execute(pool).await.ok();
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        .execute(pool).await?;
+
+    // Friends table — bidirectional friendship with status
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS friends (
+            user_pubkey BLOB NOT NULL,
+            friend_pubkey BLOB NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            PRIMARY KEY (user_pubkey, friend_pubkey),
+            FOREIGN KEY (user_pubkey) REFERENCES users(pubkey),
+            FOREIGN KEY (friend_pubkey) REFERENCES users(pubkey)
+        );
+        "#
+    )
+    .execute(pool)
+    .await?;
+
     info!("Migrations completed successfully");
     Ok(())
+}
+
+// ── Username operations ──────────────────────────────────────────────
+
+/// Set a user's username. Returns error if taken.
+pub async fn set_username(
+    pool: &Pool<Sqlite>,
+    pubkey: &[u8],
+    username: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE users SET username = ?1 WHERE pubkey = ?2")
+        .bind(username)
+        .bind(pubkey)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("UNIQUE") {
+                anyhow::anyhow!("Username '{}' is already taken", username)
+            } else {
+                e.into()
+            }
+        })?;
+    Ok(())
+}
+
+/// Look up a user's pubkey by username.
+pub async fn get_pubkey_by_username(
+    pool: &Pool<Sqlite>,
+    username: &str,
+) -> Result<Option<Vec<u8>>> {
+    let row: Option<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT pubkey FROM users WHERE username = ?1 COLLATE NOCASE"
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.0))
+}
+
+/// Search users by username prefix (case-insensitive, limit 20).
+pub async fn search_users(
+    pool: &Pool<Sqlite>,
+    query: &str,
+) -> Result<Vec<(Vec<u8>, String)>> {
+    let pattern = format!("{}%", query);
+    let rows: Vec<(Vec<u8>, String)> = sqlx::query_as(
+        "SELECT pubkey, username FROM users WHERE username LIKE ?1 COLLATE NOCASE AND username IS NOT NULL LIMIT 20"
+    )
+    .bind(&pattern)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Get username for a pubkey.
+pub async fn get_username(
+    pool: &Pool<Sqlite>,
+    pubkey: &[u8],
+) -> Result<Option<String>> {
+    let row: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT username FROM users WHERE pubkey = ?1"
+    )
+    .bind(pubkey)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| r.0))
+}
+
+// ── Friend operations ────────────────────────────────────────────────
+
+/// Send a friend request (creates pending entry for both directions).
+pub async fn send_friend_request(
+    pool: &Pool<Sqlite>,
+    from_pubkey: &[u8],
+    to_pubkey: &[u8],
+) -> Result<()> {
+    // Requester's row: outgoing
+    sqlx::query(
+        "INSERT OR IGNORE INTO friends (user_pubkey, friend_pubkey, status) VALUES (?1, ?2, 'outgoing')"
+    )
+    .bind(from_pubkey)
+    .bind(to_pubkey)
+    .execute(pool)
+    .await?;
+
+    // Recipient's row: pending (incoming)
+    sqlx::query(
+        "INSERT OR IGNORE INTO friends (user_pubkey, friend_pubkey, status) VALUES (?1, ?2, 'pending')"
+    )
+    .bind(to_pubkey)
+    .bind(from_pubkey)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Accept a friend request (set both directions to 'accepted').
+pub async fn accept_friend_request(
+    pool: &Pool<Sqlite>,
+    user_pubkey: &[u8],
+    friend_pubkey: &[u8],
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE friends SET status = 'accepted' WHERE user_pubkey = ?1 AND friend_pubkey = ?2 AND status = 'pending'"
+    )
+    .bind(user_pubkey)
+    .bind(friend_pubkey)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "UPDATE friends SET status = 'accepted' WHERE user_pubkey = ?1 AND friend_pubkey = ?2 AND status = 'outgoing'"
+    )
+    .bind(friend_pubkey)
+    .bind(user_pubkey)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Remove a friend or reject/cancel a request.
+pub async fn remove_friend(
+    pool: &Pool<Sqlite>,
+    user_pubkey: &[u8],
+    friend_pubkey: &[u8],
+) -> Result<()> {
+    sqlx::query("DELETE FROM friends WHERE user_pubkey = ?1 AND friend_pubkey = ?2")
+        .bind(user_pubkey).bind(friend_pubkey).execute(pool).await?;
+    sqlx::query("DELETE FROM friends WHERE user_pubkey = ?1 AND friend_pubkey = ?2")
+        .bind(friend_pubkey).bind(user_pubkey).execute(pool).await?;
+    Ok(())
+}
+
+/// Get all friends for a user (with status and username).
+pub async fn get_friends(
+    pool: &Pool<Sqlite>,
+    user_pubkey: &[u8],
+) -> Result<Vec<(Vec<u8>, String, Option<String>)>> {
+    // Returns: (friend_pubkey, status, username)
+    let rows: Vec<(Vec<u8>, String, Option<String>)> = sqlx::query_as(
+        r#"
+        SELECT f.friend_pubkey, f.status, u.username
+        FROM friends f
+        LEFT JOIN users u ON u.pubkey = f.friend_pubkey
+        WHERE f.user_pubkey = ?1
+        "#
+    )
+    .bind(user_pubkey)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
 
 /// Store (or update) a user's pre-key bundle for X3DH key agreement.

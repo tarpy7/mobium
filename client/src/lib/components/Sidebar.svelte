@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import { createEventDispatcher } from 'svelte';
-	import { connectionStore, conversationsStore, activeConversationStore, upsertConversation, identityStore, sidebarFilterStore } from '$lib/stores';
-	import type { SidebarFilter } from '$lib/stores';
+	import { connectionStore, conversationsStore, activeConversationStore, upsertConversation, identityStore, sidebarFilterStore, friendsStore, searchResultsStore, usernameStore } from '$lib/stores';
+	import type { SidebarFilter, Friend } from '$lib/stores';
 	import UserList from './UserList.svelte';
 	import { nsfwFilterEnabled } from '$lib/nsfwFilter';
 	import { featureStore, isDarkModeUnlocked, themeStore, toggleTheme, redeemKey, resetFeatures } from '$lib/features';
@@ -14,6 +14,55 @@
 	let showJoinChannel = $state(false);
 	let showPeople = $state(false);
 	let showSettings = $state(false);
+	let friendSearch = $state('');
+	let friendSearchLoading = $state(false);
+	let friendSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Load friends on mount
+	$effect(() => {
+		if ($connectionStore.connected) {
+			invoke('get_friends').catch(() => {});
+		}
+	});
+
+	function searchForFriends() {
+		if (friendSearch.trim().length < 2) {
+			searchResultsStore.set([]);
+			return;
+		}
+		if (friendSearchTimer) clearTimeout(friendSearchTimer);
+		friendSearchTimer = setTimeout(async () => {
+			friendSearchLoading = true;
+			try {
+				await invoke('search_users', { query: friendSearch.trim() });
+			} catch (e) { console.error('search_users error:', e); }
+			friendSearchLoading = false;
+		}, 300);
+	}
+
+	async function sendFriendReq(pubkey: string) {
+		try {
+			await invoke('send_friend_request', { targetPubkey: pubkey });
+		} catch (e) {
+			console.error('friend request error:', e);
+		}
+	}
+
+	async function acceptReq(pubkey: string) {
+		try {
+			await invoke('accept_friend_request', { friendPubkey: pubkey });
+		} catch (e) {
+			console.error('accept friend error:', e);
+		}
+	}
+
+	async function removeFriend(pubkey: string) {
+		try {
+			await invoke('remove_friend', { friendPubkey: pubkey });
+		} catch (e) {
+			console.error('remove friend error:', e);
+		}
+	}
 	let redeemKeyInput = $state('');
 	let redeemError = $state('');
 
@@ -245,10 +294,130 @@
 		{/each}
 	</div>
 
-	<!-- People Panel -->
+	<!-- Friends Panel -->
 	{#if showPeople}
-		<div class="absolute inset-0 z-20 w-72 bg-surface border-r border-surface-light/30">
-			<UserList onclose={() => { showPeople = false; }} />
+		<div class="absolute inset-0 z-20 w-72 bg-surface border-r border-surface-light/30 flex flex-col">
+			<div class="flex items-center justify-between border-b border-surface-light/20 px-3 py-2">
+				<span class="text-xs font-semibold text-text">Friends</span>
+				<button onclick={() => showPeople = false} class="text-text-muted hover:text-text p-0.5">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+				</button>
+			</div>
+
+			<!-- Search for users -->
+			<div class="px-3 py-2 border-b border-surface-light/20">
+				<input
+					type="text"
+					placeholder="Search by username…"
+					bind:value={friendSearch}
+					oninput={searchForFriends}
+					class="w-full rounded-lg bg-background/50 border border-surface-light/30 px-2.5 py-1.5 text-xs text-text placeholder:text-text-muted/40 focus:outline-none focus:border-primary/40"
+				/>
+			</div>
+
+			<div class="flex-1 overflow-y-auto">
+				<!-- Search results -->
+				{#if friendSearch.trim().length >= 2}
+					<div class="px-3 py-2">
+						<div class="text-xs text-text-muted/60 mb-1.5">Search results</div>
+						{#if friendSearchLoading}
+							<div class="text-xs text-text-muted py-2 text-center">Searching…</div>
+						{:else if $searchResultsStore.length === 0}
+							<div class="text-xs text-text-muted py-2 text-center">No users found</div>
+						{:else}
+							{#each $searchResultsStore as user}
+								<div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-surface-light/30 transition">
+									<div>
+										<div class="text-xs font-medium text-text">{user.username}</div>
+										<div class="text-xs text-text-muted/50 font-mono">{user.pubkey.slice(0, 12)}…</div>
+									</div>
+									{#if user.pubkey !== $identityStore.pubkey}
+										<button
+											onclick={() => sendFriendReq(user.pubkey)}
+											class="rounded-lg bg-primary/15 px-2 py-0.5 text-xs text-primary hover:bg-primary/25 transition"
+										>Add</button>
+									{:else}
+										<span class="text-xs text-text-muted/40">You</span>
+									{/if}
+								</div>
+							{/each}
+						{/if}
+					</div>
+				{/if}
+
+				<!-- Incoming requests -->
+				{#if $friendsStore.filter(f => f.status === 'pending').length > 0}
+					<div class="px-3 py-2 border-t border-surface-light/20">
+						<div class="text-xs text-text-muted/60 mb-1.5">Friend Requests</div>
+						{#each $friendsStore.filter(f => f.status === 'pending') as friend}
+							<div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-surface-light/30 transition">
+								<div>
+									<div class="text-xs font-medium text-text">{friend.username || friend.pubkey.slice(0, 12) + '…'}</div>
+								</div>
+								<div class="flex gap-1">
+									<button onclick={() => acceptReq(friend.pubkey)}
+										class="rounded-lg bg-accent/15 px-2 py-0.5 text-xs text-accent hover:bg-accent/25 transition">Accept</button>
+									<button onclick={() => removeFriend(friend.pubkey)}
+										class="rounded-lg bg-danger/15 px-2 py-0.5 text-xs text-danger hover:bg-danger/25 transition">✕</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Accepted friends -->
+				<div class="px-3 py-2 border-t border-surface-light/20">
+					<div class="text-xs text-text-muted/60 mb-1.5">Friends</div>
+					{#if $friendsStore.filter(f => f.status === 'accepted').length === 0}
+						<div class="text-xs text-text-muted py-2 text-center">No friends yet. Search for users above.</div>
+					{:else}
+						{#each $friendsStore.filter(f => f.status === 'accepted') as friend}
+							<div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-light/30 transition">
+								<button
+									onclick={() => {
+										dispatch('select', friend.pubkey);
+										showPeople = false;
+									}}
+									class="flex items-center gap-2 flex-1 min-w-0 text-left"
+								>
+									<div class="relative">
+										<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">
+											{(friend.username || friend.pubkey)[0]?.toUpperCase()}
+										</div>
+										{#if friend.online}
+											<div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent border-2 border-surface"></div>
+										{/if}
+									</div>
+									<div class="flex-1 min-w-0">
+										<div class="text-xs font-medium text-text truncate">{friend.username || friend.pubkey.slice(0, 12) + '…'}</div>
+										<div class="text-xs text-text-muted/50">{friend.online ? 'Online' : 'Offline'}</div>
+									</div>
+								</button>
+								<button
+									onclick={() => removeFriend(friend.pubkey)}
+									class="text-text-muted/30 hover:text-danger transition p-0.5"
+									title="Remove friend"
+								>
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+								</button>
+							</div>
+						{/each}
+					{/if}
+				</div>
+
+				<!-- Outgoing requests -->
+				{#if $friendsStore.filter(f => f.status === 'outgoing').length > 0}
+					<div class="px-3 py-2 border-t border-surface-light/20">
+						<div class="text-xs text-text-muted/60 mb-1.5">Pending</div>
+						{#each $friendsStore.filter(f => f.status === 'outgoing') as friend}
+							<div class="flex items-center justify-between rounded-lg px-2 py-1.5">
+								<div class="text-xs text-text-muted">{friend.username || friend.pubkey.slice(0, 12) + '…'}</div>
+								<span class="text-xs text-text-muted/40">Sent</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 

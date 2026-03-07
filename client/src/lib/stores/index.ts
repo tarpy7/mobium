@@ -47,8 +47,25 @@ export const identityStore = writable<{
 	mnemonicBackedUp: false
 });
 
+/** Current user's username (set on server) */
+export const usernameStore = writable<string | null>(null);
+
 /** Nickname map: pubkey -> display name */
 export const nicknamesStore = writable<Map<string, string>>(new Map());
+
+/** Friend entry */
+export interface Friend {
+	pubkey: string;
+	username: string | null;
+	status: 'pending' | 'outgoing' | 'accepted';
+	online: boolean;
+}
+
+/** Friends list from server */
+export const friendsStore = writable<Friend[]>([]);
+
+/** User search results */
+export const searchResultsStore = writable<{ pubkey: string; username: string }[]>([]);
 
 /** Get display name for a pubkey */
 export function displayName(pubkey: string): string {

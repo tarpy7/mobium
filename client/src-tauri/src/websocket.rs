@@ -2120,6 +2120,14 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
             error!("Server error: {}", error_msg);
             let _ = app.emit("server_error", ServerErrorEvent { message: error_msg.to_string() });
         }
+
+        // Username & friends events — pass through to frontend
+        "username_set" | "username_result" | "search_results" |
+        "friends_list" | "friend_request_sent" | "friend_request_received" |
+        "friend_accept_ok" | "friend_accepted" | "friend_removed" |
+        "voice_full" => {
+            let _ = app.emit(msg_type, msg.clone());
+        }
         
         _ => {
             debug!("Unknown message type: {}", msg_type);

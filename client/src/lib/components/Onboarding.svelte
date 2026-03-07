@@ -4,7 +4,7 @@
 
 	const dispatch = createEventDispatcher();
 
-	let step = $state<'age' | 'welcome' | 'create' | 'import' | 'backup'>('age');
+	let step = $state<'age' | 'welcome' | 'create' | 'import' | 'backup' | 'username'>('age');
 	let password = $state('');
 	let confirmPassword = $state('');
 	let mnemonic = $state('');
@@ -12,6 +12,10 @@
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 	let copiedMnemonic = $state(false);
+
+	// Username
+	let username = $state('');
+	let usernameError = $state<string | null>(null);
 
 	// Age verification
 	let birthYear = $state('');
@@ -82,7 +86,42 @@
 		}
 	}
 
-	function completeOnboarding() {
+	function goToUsername() {
+		step = 'username';
+	}
+
+	async function setUsername() {
+		const trimmed = username.trim();
+		if (trimmed.length < 3) {
+			usernameError = 'Username must be at least 3 characters';
+			return;
+		}
+		if (trimmed.length > 24) {
+			usernameError = 'Username must be 24 characters or less';
+			return;
+		}
+		if (!/^[a-zA-Z]/.test(trimmed)) {
+			usernameError = 'Must start with a letter';
+			return;
+		}
+		if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+			usernameError = 'Only letters, numbers, and underscores';
+			return;
+		}
+
+		isLoading = true;
+		usernameError = null;
+		try {
+			await invoke('set_username', { username: trimmed });
+			dispatch('complete');
+		} catch (e) {
+			usernameError = e instanceof Error ? e.message : String(e);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function skipUsername() {
 		dispatch('complete');
 	}
 </script>
@@ -276,13 +315,55 @@
 				</div>
 
 				<div class="space-y-2">
-					<button onclick={completeOnboarding}
+					<button onclick={goToUsername}
 						class="w-full rounded-xl bg-accent px-6 py-3 font-semibold text-white transition hover:bg-accent-dark">
 						I've Saved It — Continue
 					</button>
 					<button onclick={() => { navigator.clipboard.writeText(mnemonic); copiedMnemonic = true; setTimeout(() => copiedMnemonic = false, 2000); }}
 						class="w-full rounded-xl bg-surface-light px-6 py-2.5 text-sm text-text-muted transition hover:text-text">
 						{copiedMnemonic ? '✓ Copied' : 'Copy to Clipboard'}
+					</button>
+				</div>
+			</div>
+
+		{:else if step === 'username'}
+			<div class="w-full max-w-md space-y-6 text-center">
+				<div>
+					<div class="mb-2 text-4xl">👤</div>
+					<h2 class="text-2xl font-bold text-text">Choose a Username</h2>
+					<p class="mt-2 text-sm text-text-muted">This is how other people will find and add you. You can change it later.</p>
+				</div>
+
+				<div class="space-y-3 text-left">
+					<div>
+						<label for="username" class="mb-1 block text-xs font-medium text-text-muted">Username</label>
+						<input
+							id="username"
+							type="text"
+							placeholder="e.g. alice_42"
+							bind:value={username}
+							onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') setUsername(); }}
+							class="w-full rounded-xl border border-surface-light bg-surface px-4 py-3 text-text placeholder:text-text-muted/40 focus:border-primary focus:outline-none"
+							maxlength="24"
+						/>
+					</div>
+					<div class="text-xs text-text-muted/60">
+						3-24 characters · Letters, numbers, underscores · Must start with a letter
+					</div>
+					{#if usernameError}
+						<div class="text-xs text-danger">{usernameError}</div>
+					{/if}
+				</div>
+
+				<div class="space-y-2">
+					<button onclick={setUsername}
+						disabled={isLoading || username.trim().length < 3}
+						class="w-full rounded-xl bg-primary px-6 py-3 font-semibold text-white transition hover:bg-primary-dark disabled:opacity-40 disabled:cursor-not-allowed">
+						{isLoading ? 'Setting…' : 'Set Username'}
+					</button>
+					<button onclick={skipUsername}
+						class="w-full rounded-xl bg-surface-light px-6 py-2.5 text-sm text-text-muted transition hover:text-text">
+						Skip for now
 					</button>
 				</div>
 			</div>
