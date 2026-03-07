@@ -5,6 +5,7 @@
 	import type { SidebarFilter } from '$lib/stores';
 	import UserList from './UserList.svelte';
 	import { nsfwFilterEnabled } from '$lib/nsfwFilter';
+	import { featureStore, isDarkModeUnlocked, themeStore, toggleTheme, redeemKey, resetFeatures } from '$lib/features';
 
 	const dispatch = createEventDispatcher();
 
@@ -13,6 +14,19 @@
 	let showJoinChannel = $state(false);
 	let showPeople = $state(false);
 	let showSettings = $state(false);
+	let redeemKeyInput = $state('');
+	let redeemError = $state('');
+
+	function tryRedeem() {
+		if (!redeemKeyInput.trim()) return;
+		if (redeemKey(redeemKeyInput)) {
+			redeemKeyInput = '';
+			redeemError = '';
+		} else {
+			redeemError = 'Invalid key';
+			setTimeout(() => redeemError = '', 3000);
+		}
+	}
 	let showGroupDm = $state(false);
 	let copiedPubkey = $state(false);
 
@@ -338,6 +352,58 @@
 					class="relative w-9 h-5 rounded-full transition {$nsfwFilterEnabled ? 'bg-accent' : 'bg-surface-light'}">
 					<span class="absolute top-0.5 {$nsfwFilterEnabled ? 'left-4' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
 				</button>
+			</div>
+
+			<!-- Dark Mode Toggle -->
+			<div class="flex items-center justify-between mb-3">
+				<div>
+					<div class="text-xs font-medium text-text">Dark Mode</div>
+					{#if !$isDarkModeUnlocked}
+						<div class="text-xs text-text-muted/60">🔒 Supporter perk</div>
+					{:else}
+						<div class="text-xs text-text-muted/60">Deep plum theme</div>
+					{/if}
+				</div>
+				{#if $isDarkModeUnlocked}
+					<button onclick={toggleTheme}
+						class="relative w-9 h-5 rounded-full transition {$themeStore === 'dark' ? 'bg-primary' : 'bg-surface-light'}">
+						<span class="absolute top-0.5 {$themeStore === 'dark' ? 'left-4' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+					</button>
+				{:else}
+					<svg class="h-4 w-4 text-text-muted/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+					</svg>
+				{/if}
+			</div>
+
+			<!-- Supporter Unlock -->
+			<div class="mb-3">
+				{#if $featureStore.tier === 'supporter'}
+					<div class="flex items-center justify-between rounded-lg bg-accent/10 border border-accent/20 px-3 py-1.5">
+						<span class="text-xs text-accent font-medium">✨ Supporter unlocked</span>
+						<button onclick={resetFeatures} class="text-xs text-text-muted/50 hover:text-danger transition">Reset</button>
+					</div>
+				{:else}
+					<div class="space-y-1.5">
+						<div class="text-xs font-medium text-text">Redeem Key</div>
+						<div class="flex gap-1.5">
+							<input
+								type="password"
+								placeholder="Enter unlock key"
+								bind:value={redeemKeyInput}
+								onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') tryRedeem(); }}
+								class="flex-1 rounded-lg bg-background/50 border border-surface-light/30 px-2 py-1 text-xs text-text placeholder:text-text-muted/40 focus:outline-none focus:border-primary/40"
+							/>
+							<button onclick={tryRedeem}
+								class="rounded-lg bg-primary/15 border border-primary/20 px-2.5 py-1 text-xs text-primary hover:bg-primary/25 transition">
+								Unlock
+							</button>
+						</div>
+						{#if redeemError}
+							<div class="text-xs text-danger">{redeemError}</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 
 			<!-- Lock -->

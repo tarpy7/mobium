@@ -7,6 +7,7 @@
 	import MainApp from '$lib/components/MainApp.svelte';
 	import { setupEventListeners } from '$lib/events';
 	import { preloadModel as preloadNsfwModel } from '$lib/nsfwFilter';
+	import '$lib/features'; // Initialize theme on load
 	import { get } from 'svelte/store';
 	import { identityStore, nicknamesStore, connectionStore, conversationsStore, upsertConversation } from '$lib/stores';
 

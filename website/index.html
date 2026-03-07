@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mobium — Encrypted Communication</title>
     <meta name="description" content="Zero-knowledge encrypted messaging, voice, and file sharing. The server is blind by design. Self-host or connect to a managed instance.">
-    <meta name="theme-color" content="#e07a5f">
+    <meta name="theme-color" content="#faf5f0">
     <meta property="og:title" content="Mobium — Communication that stays yours">
     <meta property="og:description" content="End-to-end encrypted messaging. Zero-knowledge server. Self-hostable on a Raspberry Pi.">
     <meta property="og:type" content="website">
@@ -13,17 +13,17 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
     <style>
         :root {
-            --bg: #1a1625;
-            --bg2: #2a2435;
+            --bg: #faf5f0;
+            --bg2: #fff8f3;
             --accent: #e07a5f;
-            --accent2: #f2a68d;
+            --accent2: #c96a50;
             --sage: #81b29a;
             --sage-light: #a8d5ba;
             --lavender: #b8a9c9;
             --sand: #f2cc8f;
-            --text: #f4f0f7;
-            --muted: #9b8fb0;
-            --border: #3d3548;
+            --text: #3d2c2c;
+            --muted: #8a7070;
+            --border: #e8ddd3;
             --danger: #e07a7a;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,9 +38,9 @@
         nav {
             position: fixed; top: 0; width: 100%; z-index: 100;
             padding: 1rem 2rem;
-            background: rgba(26, 22, 37, 0.92);
+            background: rgba(250, 245, 240, 0.92);
             backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(61, 53, 72, 0.5);
+            border-bottom: 1px solid var(--border);
             display: flex; justify-content: space-between; align-items: center;
         }
         .logo {
@@ -68,9 +68,9 @@
         }
         .hero::before {
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse at 50% 30%, rgba(224, 122, 95, 0.08) 0%, transparent 50%),
-                        radial-gradient(ellipse at 30% 70%, rgba(129, 178, 154, 0.05) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 60%, rgba(184, 169, 201, 0.05) 0%, transparent 50%);
+            background: radial-gradient(ellipse at 50% 30%, rgba(224, 122, 95, 0.12) 0%, transparent 50%),
+                        radial-gradient(ellipse at 30% 70%, rgba(129, 178, 154, 0.08) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 60%, rgba(184, 169, 201, 0.08) 0%, transparent 50%);
         }
         .hero h1 {
             font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 800;
@@ -100,8 +100,8 @@
         .protocol-badge {
             display: inline-flex; align-items: center; gap: 0.5rem;
             padding: 0.5rem 1rem; border-radius: 999px;
-            background: rgba(129, 178, 154, 0.1); border: 1px solid rgba(129, 178, 154, 0.25);
-            color: var(--sage); font-size: 0.85rem; font-weight: 500;
+            background: rgba(129, 178, 154, 0.12); border: 1px solid rgba(129, 178, 154, 0.3);
+            color: #5a9a7d; font-size: 0.85rem; font-weight: 500;
             margin-bottom: 2rem; position: relative;
         }
         .protocol-badge::before { content: '🔒'; }
@@ -109,20 +109,21 @@
         .alpha-banner {
             display: inline-flex; align-items: center; gap: 0.5rem;
             padding: 0.4rem 0.9rem; border-radius: 999px;
-            background: rgba(242, 204, 143, 0.1); border: 1px solid rgba(242, 204, 143, 0.25);
-            color: var(--sand); font-size: 0.75rem; font-weight: 500;
+            background: rgba(242, 204, 143, 0.15); border: 1px solid rgba(242, 204, 143, 0.4);
+            color: #b08a40; font-size: 0.75rem; font-weight: 500;
             margin-bottom: 1rem; position: relative;
         }
 
         .section { padding: 6rem 2rem; max-width: 1100px; margin: 0 auto; }
         .section h2 { text-align: center; font-size: 2rem; margin-bottom: 1rem; }
         .section .subtitle { text-align: center; color: var(--muted); max-width: 600px; margin: 0 auto 3rem; }
-        .section-alt { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        .section-alt { background: #f5ede5; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
         .card {
             background: var(--bg2); border: 1px solid var(--border);
             border-radius: 16px; padding: 2rem; transition: border-color 0.2s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
         .card:hover { border-color: var(--accent); }
         .card-icon { font-size: 2rem; margin-bottom: 1rem; }
@@ -131,16 +132,17 @@
 
         .zk-grid { display: grid; grid-template-columns: 1fr 1fr; max-width: 700px; margin: 0 auto; gap: 1rem; }
         .zk-item { padding: 1.25rem; border-radius: 12px; font-size: 0.95rem; }
-        .zk-sees { background: rgba(129, 178, 154, 0.08); border: 1px solid rgba(129, 178, 154, 0.2); }
-        .zk-cant { background: rgba(224, 122, 122, 0.08); border: 1px solid rgba(224, 122, 122, 0.2); }
+        .zk-sees { background: rgba(129, 178, 154, 0.1); border: 1px solid rgba(129, 178, 154, 0.3); }
+        .zk-cant { background: rgba(224, 122, 122, 0.1); border: 1px solid rgba(224, 122, 122, 0.3); }
         .zk-label { font-weight: 600; margin-bottom: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-        .zk-sees .zk-label { color: var(--sage); }
-        .zk-cant .zk-label { color: var(--danger); }
+        .zk-sees .zk-label { color: #5a9a7d; }
+        .zk-cant .zk-label { color: #c45a5a; }
 
         .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
         .tech-item {
             text-align: center; padding: 1.5rem;
             background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
         }
         .tech-item .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
         .tech-item .value { font-weight: 600; font-size: 0.95rem; }
@@ -150,8 +152,8 @@
         .dl-card .btn { margin-top: 1rem; }
 
         .code {
-            display: inline-block; background: var(--bg); border: 1px solid var(--border);
-            border-radius: 10px; padding: 0.75rem 1.5rem; color: var(--text);
+            display: inline-block; background: #f0e6dc; border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.75rem 1.5rem; color: #4a3636;
             font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem;
             max-width: 100%; overflow-x: auto; word-break: break-all;
         }
@@ -334,7 +336,7 @@
                 <div class="code" style="margin:0.5rem 0 1rem;">cp .env.example .env && mkdir -p data</div>
                 <p><strong style="color:var(--accent2);">3.</strong> Run</p>
                 <div class="code" style="margin:0.5rem 0 1rem;">./target/release/mobium-server</div>
-                <p><strong style="color:var(--accent2);">4.</strong> Connect your client to <code style="background:var(--bg);padding:0.1rem 0.4rem;border-radius:4px;">ws://your-ip:8443</code></p>
+                <p><strong style="color:var(--accent2);">4.</strong> Connect your client to <code style="background:#f0e6dc;padding:0.1rem 0.4rem;border-radius:4px;">ws://your-ip:8443</code></p>
             </div>
             <p style="color:var(--muted);font-size:0.85rem;text-align:center;margin-top:1.5rem;">Runs on a Raspberry Pi 5 · ~9MB RAM · SQLite · Zero config</p>
         </div>

@@ -3,8 +3,35 @@
 @tailwind utilities;
 
 @layer base {
+	/* ── Light theme (default): Pastel sunset ─────────────── */
+	:root {
+		--bg: #faf5f0;
+		--surface: #fff8f3;
+		--surface-light: #f0e6dc;
+		--text: #3d2c2c;
+		--text-muted: #8a7070;
+		--sunset-gradient: linear-gradient(135deg, #fff8f3 0%, #faf5f0 50%, #f5ede5 100%);
+		--scrollbar-thumb: rgba(180, 160, 140, 0.4);
+		--scrollbar-hover: rgba(180, 160, 140, 0.6);
+		--selection: rgba(224, 122, 95, 0.2);
+	}
+
+	/* ── Dark theme: Deep plum ────────────────────────────── */
+	.dark {
+		--bg: #1a1625;
+		--surface: #2a2435;
+		--surface-light: #3d3548;
+		--text: #f4f0f7;
+		--text-muted: #9b8fb0;
+		--sunset-gradient: linear-gradient(135deg, #2a2435 0%, #1a1625 50%, #231d2e 100%);
+		--scrollbar-thumb: rgba(155, 143, 176, 0.3);
+		--scrollbar-hover: rgba(184, 169, 201, 0.4);
+		--selection: rgba(224, 122, 95, 0.3);
+	}
+
 	html {
-		@apply bg-background text-text;
+		background-color: var(--bg);
+		color: var(--text);
 	}
 
 	body {
@@ -20,18 +47,19 @@
 	}
 
 	::-webkit-scrollbar-track {
-		@apply bg-transparent;
+		background: transparent;
 	}
 
 	::-webkit-scrollbar-thumb {
-		@apply bg-surface-light/50 rounded-full;
+		background: var(--scrollbar-thumb);
+		border-radius: 9999px;
 	}
 
 	::-webkit-scrollbar-thumb:hover {
-		@apply bg-secondary/50;
+		background: var(--scrollbar-hover);
 	}
 
 	::selection {
-		@apply bg-primary/30;
+		background: var(--selection);
 	}
 }
