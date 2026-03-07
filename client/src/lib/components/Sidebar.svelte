@@ -4,6 +4,7 @@
 	import { connectionStore, conversationsStore, activeConversationStore, upsertConversation, identityStore, sidebarFilterStore } from '$lib/stores';
 	import type { SidebarFilter } from '$lib/stores';
 	import UserList from './UserList.svelte';
+	import { nsfwFilterEnabled } from '$lib/nsfwFilter';
 
 	const dispatch = createEventDispatcher();
 
@@ -306,6 +307,21 @@
 					{copiedPubkey ? 'Copied!' : 'Copy'}
 				</button>
 			</div>
+			<!-- Content Filter Toggle -->
+			<div class="flex items-center justify-between mb-3">
+				<div>
+					<div class="text-xs font-semibold text-text">Content Filter</div>
+					<div class="text-xs text-text-muted">Block explicit images & videos</div>
+				</div>
+				<button
+					onclick={() => { nsfwFilterEnabled.update(v => !v); }}
+					class="relative w-10 h-5 rounded-full transition {$nsfwFilterEnabled ? 'bg-success' : 'bg-surface-light'}"
+					title={$nsfwFilterEnabled ? 'Content filter enabled' : 'Content filter disabled'}
+				>
+					<span class="absolute top-0.5 {$nsfwFilterEnabled ? 'left-5' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+				</button>
+			</div>
+
 			<button
 				onclick={async () => {
 					try {

@@ -6,6 +6,7 @@
 	import Login from '$lib/components/Login.svelte';
 	import MainApp from '$lib/components/MainApp.svelte';
 	import { setupEventListeners } from '$lib/events';
+	import { preloadModel as preloadNsfwModel } from '$lib/nsfwFilter';
 	import { get } from 'svelte/store';
 	import { identityStore, nicknamesStore, connectionStore, conversationsStore, upsertConversation } from '$lib/stores';
 
@@ -18,6 +19,8 @@
 	onMount(async () => {
 		// Setup Tauri event listeners (fire-and-forget, don't block startup)
 		setupEventListeners().catch(e => console.warn('Event listener setup failed:', e));
+		// Preload NSFW filter model in background (non-blocking)
+		preloadNsfwModel().catch(() => {});
 
 		// Check if there are any profiles — if only one exists, auto-select it
 		try {

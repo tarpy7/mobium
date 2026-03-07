@@ -26,6 +26,8 @@
   },
   "type": "module",
   "dependencies": {
-    "@evan/wasm": "^0.0.95"
+    "@evan/wasm": "^0.0.95",
+    "@tensorflow/tfjs": "^4.22.0",
+    "nsfwjs": "^4.2.1"
   }
 }

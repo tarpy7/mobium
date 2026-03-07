@@ -123,6 +123,13 @@ async function getIceConfig(): Promise<RTCConfiguration> {
  * The file data never touches the server.
  */
 export async function sendFile(peerPubkey: string, file: File): Promise<string> {
+	// NSFW filter — check file before sending
+	const { classifyFile } = await import('./nsfwFilter');
+	const nsfwResult = await classifyFile(file);
+	if (nsfwResult.blocked) {
+		throw new Error(nsfwResult.reason || 'This file was blocked by the content filter.');
+	}
+
 	const transferId = generateTransferId();
 	const transfer: FileTransfer = {
 		id: transferId,
@@ -284,6 +291,29 @@ export async function acceptFileTransfer(transferId: string): Promise<void> {
 				if (typeof e.data === 'string' && e.data === '__MOBIUM_FILE_COMPLETE__') {
 					// Reassemble file
 					const blob = new Blob(receivedChunks, { type: transfer.fileType });
+
+					// NSFW scan received file before presenting to user
+					try {
+						const { classifyFile } = await import('./nsfwFilter');
+						const nsfwResult = await classifyFile(
+							new File([blob], transfer.fileName, { type: transfer.fileType })
+						);
+						if (nsfwResult.blocked) {
+							console.warn('[file] Received file blocked by NSFW filter:', nsfwResult.reason);
+							updateTransfer(transferId, {
+								state: 'failed',
+								error: nsfwResult.reason || 'Blocked by content filter',
+							});
+							dc.close();
+							pc.close();
+							activeConnections.delete(transferId);
+							activeChannels.delete(transferId);
+							return;
+						}
+					} catch (scanErr) {
+						console.warn('[file] NSFW scan failed, allowing file:', scanErr);
+					}
+
 					updateTransfer(transferId, { state: 'complete', progress: 1, blob });
 					setTimeout(() => {
 						dc.close();
