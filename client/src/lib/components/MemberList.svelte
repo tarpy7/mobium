@@ -29,8 +29,12 @@
 		return () => { if (retryTimer) clearTimeout(retryTimer); };
 	});
 
-	function handleWindowClick() {
-		if (actionMenuOpen) actionMenuOpen = null;
+	function handleWindowClick(e: MouseEvent) {
+		if (!actionMenuOpen) return;
+		// Don't close if clicking inside the popover
+		const target = e.target as HTMLElement;
+		if (target.closest?.('[data-action-menu]')) return;
+		actionMenuOpen = null;
 	}
 
 	async function loadMembers() {
@@ -227,6 +231,7 @@
 								</div>
 							{:else}
 								<button
+									data-action-menu
 									onclick={(e: MouseEvent) => { if (!member.isSelf) toggleActionMenu(e, member.pubkey); }}
 									class="text-sm font-medium truncate block max-w-full text-left transition {member.isSelf ? 'text-text cursor-default' : 'text-text hover:text-primary cursor-pointer'}"
 									disabled={member.isSelf}
@@ -258,6 +263,7 @@
 					<!-- Action Menu Popover -->
 					{#if actionMenuOpen === member.pubkey && !member.isSelf}
 						<div
+							data-action-menu
 							class="absolute right-3 top-full -mt-1 z-50 w-48 rounded-lg border border-surface-light bg-surface shadow-lg overflow-hidden"
 							onclick={(e: MouseEvent) => e.stopPropagation()}
 						>
