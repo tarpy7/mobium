@@ -19,7 +19,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { get } from 'svelte/store';
-import { channelVoiceStore } from './stores/index';
+import { channelVoiceStore, addToast } from './stores/index';
 import { startScreenReceiver, stopScreenReceiver, cleanupChannelScreen } from './channelScreen';
 
 // Import Opus encoder/decoder from the self-contained deno.js entry
@@ -349,6 +349,8 @@ async function pollVoiceEvents(): Promise<void> {
 					channelVoiceStore.update(s => ({
 						...s,
 						participants: event.participants || [],
+						voiceMode: event.voice_mode || null,
+						maxParticipants: event.max_participants || 40,
 					}));
 					break;
 
@@ -359,6 +361,7 @@ async function pollVoiceEvents(): Promise<void> {
 							participants: s.participants.includes(event.pubkey)
 								? s.participants
 								: [...s.participants, event.pubkey],
+							voiceMode: event.voice_mode || s.voiceMode,
 						}));
 					}
 					break;
@@ -368,14 +371,21 @@ async function pollVoiceEvents(): Promise<void> {
 						channelVoiceStore.update(s => ({
 							...s,
 							participants: s.participants.filter((p: string) => p !== event.pubkey),
+							voiceMode: event.voice_mode || s.voiceMode,
 						}));
 						// Clean up speaker state
-						const state = speakers.get(event.pubkey);
-						if (state) {
-							state.frames.length = 0;
+						const spk = speakers.get(event.pubkey);
+						if (spk) {
+							spk.frames.length = 0;
 							speakers.delete(event.pubkey);
 						}
 					}
+					break;
+
+				case 'voice_full':
+					// Voice channel is at capacity
+					addToast(`Voice channel is full (${event.max_participants || 40}/${event.max_participants || 40})`, 'error');
+					await leaveVoice();
 					break;
 			}
 		}

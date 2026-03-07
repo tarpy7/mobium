@@ -155,8 +155,18 @@
 		nicknameInput = '';
 	}
 
+	let lastSendTime = 0;
+	const SEND_COOLDOWN_MS = 300; // 1 message per 0.3 seconds
+
 	async function sendMessage() {
 		if (!newMessage.trim() || !$activeConversationStore) return;
+
+		const now = Date.now();
+		if (now - lastSendTime < SEND_COOLDOWN_MS) {
+			addToast('Slow down — 1 message per 0.3 seconds', 'error');
+			return;
+		}
+		lastSendTime = now;
 
 		const messageText = newMessage.trim();
 		const conversationId = $activeConversationStore;
@@ -372,7 +382,14 @@
 						{/if}
 					{/if}
 				</div>
-				<span class="text-xs text-text-muted">{$channelVoiceStore.participants.length} in voice</span>
+				<span class="text-xs text-text-muted">
+					{$channelVoiceStore.participants.length}/{$channelVoiceStore.maxParticipants} in voice
+					{#if $channelVoiceStore.voiceMode === 'p2p'}
+						<span class="ml-1 rounded bg-accent/20 px-1 text-accent" title="Direct peer-to-peer — audio doesn't touch the server">P2P</span>
+					{:else if $channelVoiceStore.voiceMode === 'relay'}
+						<span class="ml-1 rounded bg-lavender/20 px-1 text-lavender" title="Server relay — encrypted audio routed through server">Relay</span>
+					{/if}
+				</span>
 				{#if $channelVoiceStore.remoteScreenSharer}
 					<span class="flex items-center gap-1 rounded-lg bg-primary/15 px-2 py-1 text-xs font-medium text-primary">
 						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

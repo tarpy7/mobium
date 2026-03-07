@@ -67,7 +67,15 @@ struct Connection {
     /// Separate rate limiter for real-time media (voice + screen data).
     /// 150 burst, 80/s refill — accommodates 50fps voice + 10fps screen simultaneously.
     voice_rate_limiter: RateLimiter,
+    /// Chat message rate limiter: 1 message per 0.3 seconds (burst 3, refill 3.33/s)
+    chat_rate_limiter: RateLimiter,
 }
+
+/// Maximum participants in a voice channel.
+const MAX_VOICE_PARTICIPANTS: usize = 40;
+
+/// Threshold for P2P mesh voice (at or below this, clients use mesh WebRTC).
+const P2P_VOICE_THRESHOLD: usize = 4;
 
 // ---------------------------------------------------------------------------
 // Server state
@@ -240,6 +248,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>, addr: SocketA
         auth_challenge: auth_challenge.clone(),
         rate_limiter: RateLimiter::new(30.0, 10.0),
         voice_rate_limiter: RateLimiter::new(150.0, 80.0),
+        chat_rate_limiter: RateLimiter::new(3.0, 3.33), // 1 per 0.3s, burst 3
     };
 
     info!("New WebSocket connection from {}", addr);
@@ -390,6 +399,19 @@ async fn handle_binary_message(
     if !matches!(msg_type, "ping" | "pong" | "auth" | "voice_data" | "screen_data") {
         if !conn.rate_limiter.try_consume() {
             anyhow::bail!("Rate limit exceeded — slow down");
+        }
+    }
+
+    // Stricter chat message rate limit: 1 per 0.3s (burst 3)
+    if matches!(msg_type, "message" | "channel_message") {
+        if !conn.chat_rate_limiter.try_consume() {
+            let err = rmp_serde::to_vec_named(&serde_json::json!({
+                "type": "error",
+                "code": "RATE_LIMITED",
+                "message": "You're sending messages too fast. Limit: 1 per 0.3 seconds.",
+            }))?;
+            conn.tx.send(err).await?;
+            return Ok(());
         }
     }
 
@@ -1168,20 +1190,42 @@ async fn handle_join_voice(
     let mut participants = state.voice_channels
         .entry(channel_id.clone())
         .or_insert_with(std::collections::HashSet::new);
+
+    // Enforce voice channel capacity
+    if participants.len() >= MAX_VOICE_PARTICIPANTS && !participants.contains(sender) {
+        drop(participants);
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "voice_full",
+            "channel_id": &channel_id,
+            "message": format!("Voice channel is full ({}/{} participants)", MAX_VOICE_PARTICIPANTS, MAX_VOICE_PARTICIPANTS),
+            "max_participants": MAX_VOICE_PARTICIPANTS,
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
     participants.insert(sender.clone());
     let all_participants: Vec<Vec<u8>> = participants.iter().cloned().collect();
+    let count = all_participants.len();
     drop(participants);
+
+    // Determine voice mode: P2P mesh for ≤4 participants, server relay for 5+
+    let voice_mode = if count <= P2P_VOICE_THRESHOLD { "p2p" } else { "relay" };
 
     // Send full voice state to the joiner
     let voice_state = rmp_serde::to_vec_named(&serde_json::json!({
         "type": "voice_state", "channel_id": &channel_id,
         "participants": &all_participants,
+        "voice_mode": voice_mode,
+        "max_participants": MAX_VOICE_PARTICIPANTS,
     }))?;
     conn.tx.send(voice_state).await?;
 
-    // Notify others
+    // Notify others of join + voice mode (so they can switch P2P ↔ relay)
     let join_msg = rmp_serde::to_vec_named(&serde_json::json!({
         "type": "voice_joined", "channel_id": &channel_id, "pubkey": sender,
+        "voice_mode": voice_mode,
+        "participant_count": count,
     }))?;
     for p in &all_participants {
         if p != sender {
@@ -1218,8 +1262,12 @@ async fn handle_leave_voice(
     }
 
     if !remaining.is_empty() {
+        let rem_count = remaining.len();
+        let voice_mode = if rem_count <= P2P_VOICE_THRESHOLD { "p2p" } else { "relay" };
         let leave_msg = rmp_serde::to_vec_named(&serde_json::json!({
             "type": "voice_left", "channel_id": &channel_id, "pubkey": sender,
+            "voice_mode": voice_mode,
+            "participant_count": rem_count,
         }))?;
         for p in &remaining {
             if let Some(entry) = state.connections.get(p) {

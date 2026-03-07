@@ -197,6 +197,10 @@ export interface ChannelVoiceState {
 	screenQuality: ScreenQuality | null;
 	/** Pubkey hex of the participant currently sharing their screen (null if none) */
 	remoteScreenSharer: string | null;
+	/** Voice mode: 'p2p' for ≤4 participants, 'relay' for 5+ */
+	voiceMode: 'p2p' | 'relay' | null;
+	/** Max participants allowed (server-enforced) */
+	maxParticipants: number;
 }
 
 export const channelVoiceStore = writable<ChannelVoiceState>({
@@ -206,4 +210,6 @@ export const channelVoiceStore = writable<ChannelVoiceState>({
 	screenSharing: false,
 	screenQuality: null,
 	remoteScreenSharer: null,
+	voiceMode: null,
+	maxParticipants: 40,
 });
