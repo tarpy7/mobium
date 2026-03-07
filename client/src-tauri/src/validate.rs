@@ -157,10 +157,10 @@ pub fn validate_server_url(url: &str) -> Result<(), String> {
     if trimmed.len() > 2048 {
         return Err("Server URL too long".to_string());
     }
-    // Must start with ws:// wss:// or be a hostname/IP
-    if !trimmed.starts_with("ws://") && !trimmed.starts_with("wss://") {
-        // Try adding ws:// prefix
-        return Err("Server URL must start with ws:// or wss://".to_string());
+    // Allow bare hostnames/IPs — websocket.rs auto-prefixes ws:// or wss://
+    // Just reject obviously invalid inputs
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Err("Use ws:// or wss:// instead of http/https, or just enter the hostname/IP".to_string());
     }
     Ok(())
 }
