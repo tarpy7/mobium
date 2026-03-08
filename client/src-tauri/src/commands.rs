@@ -1819,6 +1819,7 @@ pub async fn create_sub_channel(
     channel_id: String,
     name: String,
     kind: String,
+    category: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
@@ -1828,10 +1829,11 @@ pub async fn create_sub_channel(
     if name.is_empty() || name.len() > 64 {
         return Err("Name must be 1-64 characters".to_string());
     }
+    let cat = category.unwrap_or_default();
     let conn = state.connection.read().await;
     let conn = conn.as_ref().ok_or("Not connected")?;
     let msg = rmp_serde::to_vec_named(&serde_json::json!({
-        "type": "create_sub_channel", "channel_id": channel_bytes, "name": name, "kind": kind,
+        "type": "create_sub_channel", "channel_id": channel_bytes, "name": name, "kind": kind, "category": cat,
     })).map_err(|e| e.to_string())?;
     conn.send(msg).await.map_err(|e| e.to_string())
 }

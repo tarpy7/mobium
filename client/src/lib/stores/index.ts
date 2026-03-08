@@ -70,6 +70,7 @@ export interface SubChannel {
 	id: string;
 	name: string;
 	kind: 'text' | 'voice';
+	category: string;
 	position: number;
 }
 

@@ -298,23 +298,25 @@ export async function setupEventListeners() {
 
 		// ── Sub-channel events ─────────────────────────────────────────
 
-		listen<{ channel_id: number[]; sub_channels: Array<{ id: number[]; name: string; kind: string; position: number }> }>('sub_channels_list', (event) => {
+		listen<{ channel_id: number[]; sub_channels: Array<{ id: number[]; name: string; kind: string; category?: string; position: number }> }>('sub_channels_list', (event) => {
 			const channelHex = Array.from(event.payload.channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join('');
-			const subs: SubChannel[] = (event.payload.sub_channels || []).map((s: { id: number[]; name: string; kind: string; position: number }) => ({
+			const subs: SubChannel[] = (event.payload.sub_channels || []).map((s: { id: number[]; name: string; kind: string; category?: string; position: number }) => ({
 				id: Array.from(s.id).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
 				name: s.name,
 				kind: s.kind as 'text' | 'voice',
+				category: s.category || '',
 				position: s.position,
 			}));
 			subChannelsStore.update(m => { const nm = new Map(m); nm.set(channelHex, subs); return nm; });
 		}),
 
-		listen<{ channel_id: number[]; sub_channel_id: number[]; name: string; kind: string; position: number }>('sub_channel_created', (event) => {
+		listen<{ channel_id: number[]; sub_channel_id: number[]; name: string; kind: string; category?: string; position: number }>('sub_channel_created', (event) => {
 			const channelHex = Array.from(event.payload.channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join('');
 			const sub: SubChannel = {
 				id: Array.from(event.payload.sub_channel_id).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
 				name: event.payload.name,
 				kind: event.payload.kind as 'text' | 'voice',
+				category: event.payload.category || '',
 				position: event.payload.position,
 			};
 			subChannelsStore.update(m => {

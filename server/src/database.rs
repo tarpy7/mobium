@@ -251,6 +251,10 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_sub_msg_time ON sub_channel_messages(sub_channel_id, timestamp)")
         .execute(pool).await?;
 
+    // ── Category label for sub-channels ──
+    sqlx::query("ALTER TABLE sub_channels ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await.ok();
+
     // ── Channel password (hashed, optional) ──
     sqlx::query("ALTER TABLE channels ADD COLUMN password_hash TEXT")
         .execute(pool).await.ok();
@@ -1084,15 +1088,17 @@ pub async fn create_sub_channel(
     channel_id: &[u8],
     name: &str,
     kind: &str,
+    category: &str,
     position: i64,
 ) -> Result<()> {
     sqlx::query(
-        "INSERT INTO sub_channels (id, channel_id, name, kind, position) VALUES (?1, ?2, ?3, ?4, ?5)"
+        "INSERT INTO sub_channels (id, channel_id, name, kind, category, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
     )
     .bind(id)
     .bind(channel_id)
     .bind(name)
     .bind(kind)
+    .bind(category)
     .bind(position)
     .execute(pool)
     .await?;
@@ -1119,9 +1125,9 @@ pub async fn delete_sub_channel(
 pub async fn get_sub_channels(
     pool: &Pool<Sqlite>,
     channel_id: &[u8],
-) -> Result<Vec<(Vec<u8>, String, String, i64)>> {
-    let rows: Vec<(Vec<u8>, String, String, i64)> = sqlx::query_as(
-        "SELECT id, name, kind, position FROM sub_channels WHERE channel_id = ?1 ORDER BY position, created_at"
+) -> Result<Vec<(Vec<u8>, String, String, String, i64)>> {
+    let rows: Vec<(Vec<u8>, String, String, String, i64)> = sqlx::query_as(
+        "SELECT id, name, kind, category, position FROM sub_channels WHERE channel_id = ?1 ORDER BY category, position, created_at"
     )
     .bind(channel_id)
     .fetch_all(pool)

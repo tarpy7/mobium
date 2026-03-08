@@ -4,6 +4,7 @@
 	import type { Message } from '$lib/stores';
 	import MemberList from './MemberList.svelte';
 	import ChannelSettings from './ChannelSettings.svelte';
+	import ChannelNav from './ChannelNav.svelte';
 	import { startCall } from '$lib/voice';
 	import { joinVoice, leaveVoice, toggleVoiceMute } from '$lib/channelVoice';
 	import { startChannelScreenShare, stopChannelScreenShare, bindScreenVideo } from '$lib/channelScreen';
@@ -21,8 +22,8 @@
 	let channelScreenVideoEl = $state<HTMLVideoElement | null>(null);
 	let showChannelScreenShare = $state(true);
 	let screenShareMinimized = $state(false);
-	/** User's role in current channel (for showing settings gear) */
 	let myRole = $state('member');
+	let channelNavMinimized = $state(false);
 	let dmSessionStatus = $state<'unknown' | 'establishing' | 'active'>('unknown');
 
 	const activeConversation = $derived(
@@ -598,8 +599,19 @@
 		{/if}
 	{/if}
 
-	<!-- Content area: messages + optional member panel -->
+	<!-- Content area: nav + messages + optional side panel -->
 	<div class="flex flex-1 overflow-hidden">
+
+	<!-- Channel Navigation (sub-channels) -->
+	{#if activeConversation?.type === 'group'}
+		<ChannelNav
+			channelId={activeConversation.id}
+			channelName={activeConversation.name}
+			minimized={channelNavMinimized}
+			isMod={myRole === 'owner' || myRole === 'moderator'}
+			ontoggle={() => channelNavMinimized = !channelNavMinimized}
+		/>
+	{/if}
 
 	<!-- Messages -->
 	<div bind:this={messagesContainer} class="flex-1 overflow-y-auto p-4">

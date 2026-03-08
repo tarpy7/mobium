@@ -18,6 +18,7 @@
 	let tab = $state<'rooms' | 'bans' | 'settings'>('rooms');
 	let newRoomName = $state('');
 	let newRoomKind = $state<'text' | 'voice'>('text');
+	let newRoomCategory = $state('');
 	let passwordInput = $state('');
 	let showPasswordField = $state(false);
 	let loadingBans = $state(false);
@@ -35,8 +36,9 @@
 		if (!name) return;
 		if (name.length > 64) { addToast('Name too long (max 64)', 'error'); return; }
 		try {
-			await invoke('create_sub_channel', { channelId, name, kind: newRoomKind });
+			await invoke('create_sub_channel', { channelId, name, kind: newRoomKind, category: newRoomCategory.trim() || null });
 			newRoomName = '';
+			newRoomCategory = '';
 		} catch (e) {
 			addToast(`Failed: ${e}`, 'error');
 		}
@@ -169,27 +171,18 @@
 					<div class="border-t border-surface-light/40 pt-3">
 						<div class="text-xs text-text-muted mb-2">Create Room</div>
 						<div class="flex gap-1.5">
-							<input
-								type="text"
-								bind:value={newRoomName}
-								placeholder="Room name…"
-								maxlength="64"
+							<input type="text" bind:value={newRoomName} placeholder="Room name…" maxlength="64"
 								onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') createRoom(); }}
-								class="flex-1 rounded-lg bg-background px-2.5 py-1.5 text-xs text-text outline-none ring-1 ring-surface-light focus:ring-primary"
-							/>
-							<select
-								bind:value={newRoomKind}
-								class="rounded-lg bg-background px-2 py-1.5 text-xs text-text outline-none ring-1 ring-surface-light"
-							>
+								class="flex-1 rounded-lg bg-background px-2.5 py-1.5 text-xs text-text outline-none ring-1 ring-surface-light focus:ring-primary" />
+							<select bind:value={newRoomKind} class="rounded-lg bg-background px-2 py-1.5 text-xs text-text outline-none ring-1 ring-surface-light">
 								<option value="text">💬 Text</option>
 								<option value="voice">🔊 Voice</option>
 							</select>
 						</div>
-						<button
-							onclick={createRoom}
-							disabled={!newRoomName.trim()}
-							class="mt-2 w-full rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25 transition disabled:opacity-40"
-						>
+						<input type="text" bind:value={newRoomCategory} placeholder="Category (optional)"
+							class="mt-1.5 w-full rounded-lg bg-background px-2.5 py-1.5 text-xs text-text outline-none ring-1 ring-surface-light focus:ring-primary" />
+						<button onclick={createRoom} disabled={!newRoomName.trim()}
+							class="mt-2 w-full rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25 transition disabled:opacity-40">
 							Create Room
 						</button>
 					</div>

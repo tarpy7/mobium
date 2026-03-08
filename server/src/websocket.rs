@@ -1750,6 +1750,7 @@ async fn handle_create_sub_channel(
     let name = msg.get("name").and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing name"))?;
     let kind = msg.get("kind").and_then(|v| v.as_str()).unwrap_or("text");
+    let category = msg.get("category").and_then(|v| v.as_str()).unwrap_or("");
     let position = msg.get("position").and_then(|v| v.as_i64()).unwrap_or(0);
 
     if kind != "text" && kind != "voice" {
@@ -1782,7 +1783,7 @@ async fn handle_create_sub_channel(
     use rand::RngCore;
     OsRng.fill_bytes(&mut id);
 
-    database::create_sub_channel(&state.db_pool, &id, &channel_id, name, kind, position).await?;
+    database::create_sub_channel(&state.db_pool, &id, &channel_id, name, kind, category, position).await?;
 
     // Notify all channel members
     let members = database::get_channel_members(&state.db_pool, &channel_id).await?;
@@ -1792,6 +1793,7 @@ async fn handle_create_sub_channel(
         "sub_channel_id": id.to_vec(),
         "name": name,
         "kind": kind,
+        "category": category,
         "position": position,
     }))?;
     for member_pk in &members {
@@ -1855,8 +1857,8 @@ async fn handle_get_sub_channels(
         .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
 
     let subs = database::get_sub_channels(&state.db_pool, &channel_id).await?;
-    let list: Vec<serde_json::Value> = subs.into_iter().map(|(id, name, kind, pos)| {
-        serde_json::json!({ "id": id, "name": name, "kind": kind, "position": pos })
+    let list: Vec<serde_json::Value> = subs.into_iter().map(|(id, name, kind, category, pos)| {
+        serde_json::json!({ "id": id, "name": name, "kind": kind, "category": category, "position": pos })
     }).collect();
 
     let response = rmp_serde::to_vec_named(&serde_json::json!({
