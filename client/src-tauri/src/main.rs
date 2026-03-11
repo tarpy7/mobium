@@ -140,6 +140,8 @@ fn main() {
             commands::get_sub_channels,
             commands::set_channel_password,
             commands::join_channel_with_password,
+            commands::get_channel_info,
+            commands::update_channel_info,
             
             // DM / X3DH
             commands::publish_prekeys,

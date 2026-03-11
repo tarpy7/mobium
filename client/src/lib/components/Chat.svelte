@@ -4,7 +4,7 @@
 	import type { Message } from '$lib/stores';
 	import MemberList from './MemberList.svelte';
 	import ChannelSettings from './ChannelSettings.svelte';
-	// ChannelNav is now in ContextPanel
+	import ChannelConfig from './ChannelConfig.svelte';
 	import { startCall } from '$lib/voice';
 	import { joinVoice, leaveVoice, toggleVoiceMute } from '$lib/channelVoice';
 	import { startChannelScreenShare, stopChannelScreenShare, bindScreenVideo } from '$lib/channelScreen';
@@ -23,7 +23,7 @@
 	let showChannelScreenShare = $state(true);
 	let screenShareMinimized = $state(false);
 	let myRole = $state('member');
-	// Channel nav moved to ContextPanel
+	let showChannelConfig = $state(false);
 	let dmSessionStatus = $state<'unknown' | 'establishing' | 'active'>('unknown');
 
 	const activeConversation = $derived(
@@ -288,8 +288,14 @@
 				{activeConversation.type === 'dm' ? '👤' : '👥'}
 			</div>
 			<div>
-				<h2 class="font-semibold text-text">
-					{activeConversation.name}
+				<h2 class="font-semibold text-text flex items-center gap-1">
+					{#if activeConversation.type === 'group'}
+						<button onclick={() => showChannelConfig = true} class="hover:text-primary transition" title="Channel settings">
+							{activeConversation.name}
+						</button>
+					{:else}
+						{activeConversation.name}
+					{/if}
 					{#if activeConversation.type === 'group' && $activeSubChannelStore}
 						{@const activeSub = ($subChannelsStore.get(activeConversation.id) || []).find(s => s.id === $activeSubChannelStore)}
 						{#if activeSub}
@@ -724,4 +730,14 @@
 	<div class="flex h-full items-center justify-center">
 		<div class="text-text-muted">Select a conversation</div>
 	</div>
+{/if}
+
+<!-- Channel Config Modal -->
+{#if showChannelConfig && activeConversation?.type === 'group'}
+	<ChannelConfig
+		channelId={activeConversation.id}
+		channelName={activeConversation.name}
+		isOwner={myRole === 'owner'}
+		onclose={() => showChannelConfig = false}
+	/>
 {/if}

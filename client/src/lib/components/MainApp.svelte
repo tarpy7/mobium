@@ -12,6 +12,7 @@
 
 	let showConnectionModal = $state(false);
 	let activeView = $state('home');
+	let previousView = $state('home');
 
 	interface DbConversation {
 		id: string;
@@ -43,8 +44,13 @@
 	});
 
 	function handleViewChange(view: string) {
+		// Toggle: clicking the same view goes back to previous
+		if (view === activeView && (view === 'settings' || view === 'friends' || view === 'create')) {
+			activeView = previousView;
+			return;
+		}
+		previousView = activeView;
 		activeView = view;
-		// If selecting a channel view, also set it as active conversation
 		if (view.startsWith('channel:')) {
 			activeConversationStore.set(view.slice(8));
 		}
@@ -52,6 +58,12 @@
 
 	function handleSelect(id: string) {
 		activeConversationStore.set(id);
+		// If selecting a channel from friends/create/settings, switch view to that channel
+		const conv = $conversationsStore.find(c => c.id === id);
+		if (conv?.type === 'group' && !activeView.startsWith('channel:')) {
+			previousView = activeView;
+			activeView = 'channel:' + id;
+		}
 	}
 
 	function handleLock() {

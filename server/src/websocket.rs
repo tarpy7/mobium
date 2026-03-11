@@ -453,6 +453,9 @@ async fn handle_binary_message(
         "get_sub_history" => handle_get_sub_history(&msg, conn, state).await,
         // Channel password
         "set_channel_password" => handle_set_channel_password(&msg, conn, state).await,
+        // Channel info
+        "get_channel_info" => handle_get_channel_info(&msg, conn, state).await,
+        "update_channel_info" => handle_update_channel_info(&msg, conn, state).await,
         "ping" => {
             let pong = rmp_serde::to_vec_named(&serde_json::json!({"type": "pong"}))?;
             conn.tx.send(pong).await?;
@@ -1994,5 +1997,83 @@ async fn handle_set_channel_password(
     info!("Channel {} password {}",
         hex::encode(&channel_id[..8.min(channel_id.len())]),
         if hash.is_some() { "set" } else { "cleared" });
+    Ok(())
+}
+
+// ── Channel info (get/update metadata) ──────────────────────────────
+
+async fn handle_get_channel_info(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let _user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let info = database::get_channel_info(&state.db_pool, &channel_id).await?;
+    let resp = if let Some((desc, rules, topic, access_mode, creator)) = info {
+        serde_json::json!({
+            "type": "channel_info",
+            "channel_id": hex::encode(&channel_id),
+            "description": desc,
+            "rules": rules,
+            "topic": topic,
+            "access_mode": access_mode,
+            "creator_pubkey": creator.map(|c| hex::encode(&c)),
+        })
+    } else {
+        serde_json::json!({
+            "type": "server_error",
+            "code": "channel_not_found",
+            "message": "Channel not found"
+        })
+    };
+    let data = rmp_serde::to_vec_named(&resp)?;
+    conn.tx.send(data).await?;
+    Ok(())
+}
+
+async fn handle_update_channel_info(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let channel_id = extract_bytes(msg.get("channel_id"))
+        .ok_or_else(|| anyhow::anyhow!("Missing channel_id"))?;
+    let description = msg.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let rules = msg.get("rules").and_then(|v| v.as_str()).unwrap_or("");
+    let topic = msg.get("topic").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Only owner can update
+    if let Err(_) = require_owner(state, &channel_id, user).await {
+        let err = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "server_error",
+            "code": "not_owner",
+            "message": "Only the channel owner can update channel info"
+        }))?;
+        conn.tx.send(err).await?;
+        return Ok(());
+    }
+
+    database::update_channel_info(&state.db_pool, &channel_id, description, rules, topic).await?;
+
+    // Broadcast to all channel members
+    let resp = serde_json::json!({
+        "type": "channel_info_updated",
+        "channel_id": hex::encode(&channel_id),
+        "description": description,
+        "rules": rules,
+        "topic": topic,
+    });
+    let data = rmp_serde::to_vec_named(&resp)?;
+    let members = database::get_channel_members(&state.db_pool, &channel_id).await?;
+    for pk in &members {
+        if let Some(tx) = state.connections.get(pk) {
+            let _ = tx.send(data.clone()).await;
+        }
+    }
+
+    info!("Channel {} info updated by owner", hex::encode(&channel_id[..8.min(channel_id.len())]));
     Ok(())
 }

@@ -2341,3 +2341,40 @@ pub async fn bootstrap_tor(
     tor.get_client().await.map_err(|e| format!("Tor bootstrap failed: {}", e))?;
     Ok(true)
 }
+
+// ── Channel info ──────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_channel_info(
+    channel_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_channel_info", "channel_id": channel_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_channel_info(
+    channel_id: String,
+    description: String,
+    rules: String,
+    topic: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let channel_bytes = crate::validate::validate_pubkey_hex(&channel_id)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "update_channel_info",
+        "channel_id": channel_bytes,
+        "description": description,
+        "rules": rules,
+        "topic": topic,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}

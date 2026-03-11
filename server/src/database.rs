@@ -259,6 +259,14 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     sqlx::query("ALTER TABLE channels ADD COLUMN password_hash TEXT")
         .execute(pool).await.ok();
 
+    // ── Channel metadata (description, rules, topic) ──
+    sqlx::query("ALTER TABLE channels ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await.ok();
+    sqlx::query("ALTER TABLE channels ADD COLUMN rules TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await.ok();
+    sqlx::query("ALTER TABLE channels ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
+        .execute(pool).await.ok();
+
     info!("Migrations completed successfully");
     Ok(())
 }
@@ -902,6 +910,38 @@ pub async fn set_channel_access_mode(
 ) -> Result<()> {
     sqlx::query("UPDATE channels SET access_mode = ?1 WHERE id = ?2")
         .bind(access_mode)
+        .bind(channel_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Get channel info (description, rules, topic, access_mode, creator)
+pub async fn get_channel_info(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+) -> Result<Option<(String, String, String, String, Option<Vec<u8>>)>> {
+    let row: Option<(String, String, String, String, Option<Vec<u8>>)> = sqlx::query_as(
+        "SELECT description, rules, topic, access_mode, creator_pubkey FROM channels WHERE id = ?1"
+    )
+    .bind(channel_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Update channel metadata (owner only — caller must verify)
+pub async fn update_channel_info(
+    pool: &Pool<Sqlite>,
+    channel_id: &[u8],
+    description: &str,
+    rules: &str,
+    topic: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE channels SET description = ?1, rules = ?2, topic = ?3 WHERE id = ?4")
+        .bind(description)
+        .bind(rules)
+        .bind(topic)
         .bind(channel_id)
         .execute(pool)
         .await?;

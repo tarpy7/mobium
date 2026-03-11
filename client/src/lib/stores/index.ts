@@ -83,6 +83,16 @@ export const activeSubChannelStore = writable<string | null>(null);
 /** Bans list for a channel (populated on demand) */
 export const bansStore = writable<{ pubkey: string; reason: string | null }[]>([]);
 
+// ── Channel info (description, rules, topic) ──
+export interface ChannelInfo {
+	description: string;
+	rules: string;
+	topic: string;
+	accessMode: string;
+	creatorPubkey: string | null;
+}
+export const channelInfoStore = writable<Map<string, ChannelInfo>>(new Map());
+
 /** Get display name for a pubkey */
 export function displayName(pubkey: string): string {
 	// 1. Local nickname (highest priority — user explicitly set this)

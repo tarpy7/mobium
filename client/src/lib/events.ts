@@ -19,6 +19,7 @@ import {
 	searchResultsStore,
 	subChannelsStore,
 	bansStore,
+	channelInfoStore,
 	type Message,
 	type SubChannel,
 } from '$lib/stores';
@@ -342,6 +343,28 @@ export async function setupEventListeners() {
 
 		listen<{ channel_id: number[]; has_password: boolean }>('channel_password_set', (event) => {
 			addToast(event.payload.has_password ? 'Channel password set' : 'Channel password cleared', 'success');
+		}),
+
+		// ── Channel info ────────────────────────────────────────────────
+
+		listen<{ channel_id: string; description: string; rules: string; topic: string; access_mode: string; creator_pubkey: string | null }>('channel_info', (event) => {
+			const p = event.payload;
+			channelInfoStore.update(m => {
+				const nm = new Map(m);
+				nm.set(p.channel_id, { description: p.description, rules: p.rules, topic: p.topic, accessMode: p.access_mode, creatorPubkey: p.creator_pubkey });
+				return nm;
+			});
+		}),
+
+		listen<{ channel_id: string; description: string; rules: string; topic: string }>('channel_info_updated', (event) => {
+			const p = event.payload;
+			channelInfoStore.update(m => {
+				const nm = new Map(m);
+				const existing = nm.get(p.channel_id);
+				nm.set(p.channel_id, { description: p.description, rules: p.rules, topic: p.topic, accessMode: existing?.accessMode || 'public', creatorPubkey: existing?.creatorPubkey || null });
+				return nm;
+			});
+			addToast('Channel info updated', 'success');
 		}),
 
 		// ── Server errors with codes ───────────────────────────────────
