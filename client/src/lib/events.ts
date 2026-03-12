@@ -371,6 +371,12 @@ export async function setupEventListeners() {
 
 		listen<{ message: string; code?: string }>('server_error', (event) => {
 			const { message, code } = event.payload;
+			// Suppress noisy non-critical errors
+			const suppress = ['Missing channel_id', 'Missing recipient', 'Request failed', 'channel_not_found'];
+			if (suppress.some(s => message.includes(s))) {
+				console.warn('[server_error] suppressed:', message);
+				return;
+			}
 			if (code === 'banned') {
 				addToast(message, 'error');
 			} else if (code === 'password_required') {

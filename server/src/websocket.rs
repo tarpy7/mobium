@@ -319,14 +319,24 @@ async fn handle_socket(socket: WebSocket, state: Arc<ServerState>, addr: SocketA
             Some(Ok(msg)) => match msg {
                 Message::Binary(data) => {
                     if let Err(e) = handle_binary_message(&data, &mut conn, &state).await {
-                        // Log the full error for server-side debugging but send
-                        // a generic message to the client to avoid leaking
-                        // internal details (stack traces, SQL errors, etc.).
-                        error!("Error handling message from {}: {}", addr, e);
+                        let err_str = e.to_string();
+                        error!("Error handling message from {}: {}", addr, err_str);
+                        // Forward safe error messages (Missing X, Not authenticated, etc.)
+                        // but hide internal errors (SQL, IO, etc.)
+                        let client_msg = if err_str.starts_with("Missing ")
+                            || err_str.starts_with("Not authenticated")
+                            || err_str.starts_with("Unknown message type")
+                            || err_str.starts_with("Rate limit")
+                            || err_str.starts_with("Requires ")
+                        {
+                            err_str.clone()
+                        } else {
+                            "Request failed".to_string()
+                        };
                         let _ = tx.send(rmp_serde::to_vec_named(&serde_json::json!({
                             "type": "error",
                             "code": 400,
-                            "message": "Request failed",
+                            "message": client_msg,
                         })).unwrap_or_default()).await;
                     }
                 }
