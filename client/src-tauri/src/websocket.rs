@@ -2144,7 +2144,12 @@ async fn handle_server_message(data: &[u8], app: &AppHandle) -> Result<()> {
         "sub_channel_message" | "sub_channel_history" |
         // Channel password
         "channel_info" | "channel_info_updated" |
-        "channel_password_set" | "channel_access_updated" => {
+        "channel_password_set" | "channel_access_updated" |
+        // Profile & post events
+        "profile_updated" | "profile_data" |
+        "post_created" | "post_deleted" | "user_posts" | "feed_posts" |
+        "post_reacted" | "post_unreacted" |
+        "media_uploaded" | "media_data" => {
             let _ = app.emit(msg_type, msg.clone());
         }
         

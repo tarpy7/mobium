@@ -20,8 +20,13 @@ import {
 	subChannelsStore,
 	bansStore,
 	channelInfoStore,
+	profilesStore,
+	feedStore,
+	userPostsStore,
 	type Message,
 	type SubChannel,
+	type Post,
+	type UserProfile,
 } from '$lib/stores';
 
 let listenersSetup = false;
@@ -365,6 +370,94 @@ export async function setupEventListeners() {
 				return nm;
 			});
 			addToast('Channel info updated', 'success');
+		}),
+
+		// ── Profiles ────────────────────────────────────────────────────
+
+		listen<{ pubkey: string; username?: string; display_name: string; bio: string; avatar_hash: string; banner_hash: string; custom_fields?: string; updated_at?: number }>('profile_data', (event) => {
+			const p = event.payload;
+			profilesStore.update(m => {
+				const nm = new Map(m);
+				nm.set(p.pubkey, {
+					pubkey: p.pubkey, username: p.username || null,
+					displayName: p.display_name, bio: p.bio,
+					avatarHash: p.avatar_hash, bannerHash: p.banner_hash,
+					customFields: p.custom_fields || '{}',
+					updatedAt: p.updated_at || 0,
+				});
+				return nm;
+			});
+		}),
+
+		listen<{ pubkey: string; display_name: string; bio: string; avatar_hash: string; banner_hash: string }>('profile_updated', (event) => {
+			const p = event.payload;
+			profilesStore.update(m => {
+				const nm = new Map(m);
+				const existing = nm.get(p.pubkey);
+				nm.set(p.pubkey, {
+					pubkey: p.pubkey, username: existing?.username || null,
+					displayName: p.display_name, bio: p.bio,
+					avatarHash: p.avatar_hash, bannerHash: p.banner_hash,
+					customFields: existing?.customFields || '{}',
+					updatedAt: Date.now() / 1000,
+				});
+				return nm;
+			});
+			addToast('Profile updated', 'success');
+		}),
+
+		// ── Posts ────────────────────────────────────────────────────────
+
+		listen<{ posts: Array<{ id: string; author_pubkey: string; content: string; media_hash?: string; media_type?: string; media_size?: number; visibility: string; reply_to?: string; created_at: number }> }>('feed_posts', (event) => {
+			const posts: Post[] = event.payload.posts.map(p => ({
+				id: p.id, authorPubkey: p.author_pubkey, content: p.content,
+				mediaHash: p.media_hash || null, mediaType: p.media_type || null,
+				mediaSize: p.media_size || null,
+				visibility: p.visibility as Post['visibility'],
+				replyTo: p.reply_to || null, createdAt: p.created_at,
+			}));
+			feedStore.set(posts);
+		}),
+
+		listen<{ pubkey: string; posts: Array<{ id: string; author_pubkey: string; content: string; media_hash?: string; media_type?: string; media_size?: number; visibility: string; reply_to?: string; created_at: number }> }>('user_posts', (event) => {
+			const posts: Post[] = event.payload.posts.map(p => ({
+				id: p.id, authorPubkey: p.author_pubkey, content: p.content,
+				mediaHash: p.media_hash || null, mediaType: p.media_type || null,
+				mediaSize: p.media_size || null,
+				visibility: p.visibility as Post['visibility'],
+				replyTo: p.reply_to || null, createdAt: p.created_at,
+			}));
+			userPostsStore.update(m => { const nm = new Map(m); nm.set(event.payload.pubkey, posts); return nm; });
+		}),
+
+		listen<{ id: string; author_pubkey: string; content: string; media_hash?: string; media_type?: string; media_size?: number; visibility: string; reply_to?: string; created_at: number }>('post_created', (event) => {
+			const p = event.payload;
+			const post: Post = {
+				id: p.id, authorPubkey: p.author_pubkey, content: p.content,
+				mediaHash: p.media_hash || null, mediaType: p.media_type || null,
+				mediaSize: p.media_size || null,
+				visibility: p.visibility as Post['visibility'],
+				replyTo: p.reply_to || null, createdAt: p.created_at,
+			};
+			// Add to feed at top
+			feedStore.update(posts => [post, ...posts]);
+			// Add to user posts
+			userPostsStore.update(m => {
+				const nm = new Map(m);
+				const existing = nm.get(p.author_pubkey) || [];
+				nm.set(p.author_pubkey, [post, ...existing]);
+				return nm;
+			});
+		}),
+
+		listen<{ post_id: string }>('post_deleted', (event) => {
+			const id = event.payload.post_id;
+			feedStore.update(posts => posts.filter(p => p.id !== id));
+			userPostsStore.update(m => {
+				const nm = new Map(m);
+				for (const [k, v] of nm) { nm.set(k, v.filter(p => p.id !== id)); }
+				return nm;
+			});
 		}),
 
 		// ── Server errors with codes ───────────────────────────────────

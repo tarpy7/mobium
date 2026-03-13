@@ -267,6 +267,66 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     sqlx::query("ALTER TABLE channels ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
         .execute(pool).await.ok();
 
+    // ── User profiles ──
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS profiles (
+            pubkey BLOB PRIMARY KEY,
+            display_name TEXT NOT NULL DEFAULT '',
+            bio TEXT NOT NULL DEFAULT '',
+            avatar_hash TEXT NOT NULL DEFAULT '',
+            banner_hash TEXT NOT NULL DEFAULT '',
+            custom_fields TEXT NOT NULL DEFAULT '{}',
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (pubkey) REFERENCES users(pubkey)
+        )
+    "#).execute(pool).await?;
+
+    // ── Posts ──
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS posts (
+            id TEXT PRIMARY KEY,
+            author_pubkey BLOB NOT NULL,
+            content TEXT NOT NULL,
+            media_hash TEXT,
+            media_type TEXT,
+            media_size INTEGER,
+            visibility TEXT NOT NULL DEFAULT 'friends',
+            reply_to TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (author_pubkey) REFERENCES users(pubkey)
+        )
+    "#).execute(pool).await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_pubkey, created_at DESC)")
+        .execute(pool).await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC)")
+        .execute(pool).await?;
+
+    // ── Post reactions (likes, emoji) ──
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS post_reactions (
+            post_id TEXT NOT NULL,
+            user_pubkey BLOB NOT NULL,
+            emoji TEXT NOT NULL DEFAULT '❤️',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            PRIMARY KEY (post_id, user_pubkey),
+            FOREIGN KEY (post_id) REFERENCES posts(id),
+            FOREIGN KEY (user_pubkey) REFERENCES users(pubkey)
+        )
+    "#).execute(pool).await?;
+
+    // ── Media blobs (stored on server, encrypted client-side) ──
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS media (
+            hash TEXT PRIMARY KEY,
+            data BLOB NOT NULL,
+            mime_type TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            uploader_pubkey BLOB NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        )
+    "#).execute(pool).await?;
+
     info!("Migrations completed successfully");
     Ok(())
 }
@@ -1247,4 +1307,176 @@ pub async fn get_channel_password_hash(
     .fetch_optional(pool)
     .await?;
     Ok(row.and_then(|r| r.0))
+}
+
+// ── Profiles ─────────────────────────────────────────────────────────
+
+pub async fn upsert_profile(
+    pool: &Pool<Sqlite>,
+    pubkey: &[u8],
+    display_name: &str,
+    bio: &str,
+    avatar_hash: &str,
+    banner_hash: &str,
+    custom_fields: &str,
+) -> Result<()> {
+    sqlx::query(
+        r#"INSERT INTO profiles (pubkey, display_name, bio, avatar_hash, banner_hash, custom_fields, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%s', 'now'))
+           ON CONFLICT(pubkey) DO UPDATE SET
+             display_name = ?2, bio = ?3, avatar_hash = ?4, banner_hash = ?5,
+             custom_fields = ?6, updated_at = strftime('%s', 'now')"#
+    )
+    .bind(pubkey).bind(display_name).bind(bio)
+    .bind(avatar_hash).bind(banner_hash).bind(custom_fields)
+    .execute(pool).await?;
+    Ok(())
+}
+
+pub async fn get_profile(
+    pool: &Pool<Sqlite>,
+    pubkey: &[u8],
+) -> Result<Option<(String, String, String, String, String, i64)>> {
+    // Returns (display_name, bio, avatar_hash, banner_hash, custom_fields, updated_at)
+    let row: Option<(String, String, String, String, String, i64)> = sqlx::query_as(
+        "SELECT display_name, bio, avatar_hash, banner_hash, custom_fields, updated_at FROM profiles WHERE pubkey = ?1"
+    ).bind(pubkey).fetch_optional(pool).await?;
+    Ok(row)
+}
+
+// ── Posts ─────────────────────────────────────────────────────────────
+
+pub async fn create_post(
+    pool: &Pool<Sqlite>,
+    id: &str,
+    author_pubkey: &[u8],
+    content: &str,
+    media_hash: Option<&str>,
+    media_type: Option<&str>,
+    media_size: Option<i64>,
+    visibility: &str,
+    reply_to: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        r#"INSERT INTO posts (id, author_pubkey, content, media_hash, media_type, media_size, visibility, reply_to)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#
+    )
+    .bind(id).bind(author_pubkey).bind(content)
+    .bind(media_hash).bind(media_type).bind(media_size)
+    .bind(visibility).bind(reply_to)
+    .execute(pool).await?;
+    Ok(())
+}
+
+pub async fn delete_post(
+    pool: &Pool<Sqlite>,
+    id: &str,
+    author_pubkey: &[u8],
+) -> Result<bool> {
+    let result = sqlx::query("DELETE FROM posts WHERE id = ?1 AND author_pubkey = ?2")
+        .bind(id).bind(author_pubkey).execute(pool).await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// Get posts by a specific user, newest first
+pub async fn get_user_posts(
+    pool: &Pool<Sqlite>,
+    author_pubkey: &[u8],
+    limit: i64,
+    before_ts: Option<i64>,
+) -> Result<Vec<(String, Vec<u8>, String, Option<String>, Option<String>, Option<i64>, String, Option<String>, i64)>> {
+    let ts = before_ts.unwrap_or(i64::MAX);
+    let rows: Vec<(String, Vec<u8>, String, Option<String>, Option<String>, Option<i64>, String, Option<String>, i64)> = sqlx::query_as(
+        r#"SELECT id, author_pubkey, content, media_hash, media_type, media_size, visibility, reply_to, created_at
+           FROM posts WHERE author_pubkey = ?1 AND created_at < ?2
+           ORDER BY created_at DESC LIMIT ?3"#
+    ).bind(author_pubkey).bind(ts).bind(limit).fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// Get feed: posts from a list of pubkeys, newest first
+pub async fn get_feed_posts(
+    pool: &Pool<Sqlite>,
+    pubkeys: &[Vec<u8>],
+    limit: i64,
+    before_ts: Option<i64>,
+) -> Result<Vec<(String, Vec<u8>, String, Option<String>, Option<String>, Option<i64>, String, Option<String>, i64)>> {
+    if pubkeys.is_empty() { return Ok(vec![]); }
+    let ts = before_ts.unwrap_or(i64::MAX);
+    // Build IN clause with positional params
+    let placeholders: Vec<String> = (0..pubkeys.len()).map(|i| format!("?{}", i + 3)).collect();
+    let query = format!(
+        r#"SELECT id, author_pubkey, content, media_hash, media_type, media_size, visibility, reply_to, created_at
+           FROM posts WHERE author_pubkey IN ({}) AND created_at < ?1 AND (visibility = 'public' OR visibility = 'friends')
+           ORDER BY created_at DESC LIMIT ?2"#,
+        placeholders.join(",")
+    );
+    let mut q = sqlx::query_as::<_, (String, Vec<u8>, String, Option<String>, Option<String>, Option<i64>, String, Option<String>, i64)>(&query)
+        .bind(ts).bind(limit);
+    for pk in pubkeys {
+        q = q.bind(pk);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// React to a post
+pub async fn react_to_post(
+    pool: &Pool<Sqlite>,
+    post_id: &str,
+    user_pubkey: &[u8],
+    emoji: &str,
+) -> Result<()> {
+    sqlx::query(
+        r#"INSERT INTO post_reactions (post_id, user_pubkey, emoji)
+           VALUES (?1, ?2, ?3)
+           ON CONFLICT(post_id, user_pubkey) DO UPDATE SET emoji = ?3"#
+    ).bind(post_id).bind(user_pubkey).bind(emoji).execute(pool).await?;
+    Ok(())
+}
+
+pub async fn unreact_to_post(
+    pool: &Pool<Sqlite>,
+    post_id: &str,
+    user_pubkey: &[u8],
+) -> Result<()> {
+    sqlx::query("DELETE FROM post_reactions WHERE post_id = ?1 AND user_pubkey = ?2")
+        .bind(post_id).bind(user_pubkey).execute(pool).await?;
+    Ok(())
+}
+
+pub async fn get_post_reactions(
+    pool: &Pool<Sqlite>,
+    post_id: &str,
+) -> Result<Vec<(Vec<u8>, String)>> {
+    let rows: Vec<(Vec<u8>, String)> = sqlx::query_as(
+        "SELECT user_pubkey, emoji FROM post_reactions WHERE post_id = ?1"
+    ).bind(post_id).fetch_all(pool).await?;
+    Ok(rows)
+}
+
+// ── Media ────────────────────────────────────────────────────────────
+
+pub async fn store_media(
+    pool: &Pool<Sqlite>,
+    hash: &str,
+    data: &[u8],
+    mime_type: &str,
+    uploader: &[u8],
+) -> Result<()> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO media (hash, data, mime_type, size, uploader_pubkey) VALUES (?1, ?2, ?3, ?4, ?5)"
+    ).bind(hash).bind(data).bind(mime_type).bind(data.len() as i64).bind(uploader)
+    .execute(pool).await?;
+    Ok(())
+}
+
+pub async fn get_media(
+    pool: &Pool<Sqlite>,
+    hash: &str,
+) -> Result<Option<(Vec<u8>, String)>> {
+    let row: Option<(Vec<u8>, String)> = sqlx::query_as(
+        "SELECT data, mime_type FROM media WHERE hash = ?1"
+    ).bind(hash).fetch_optional(pool).await?;
+    Ok(row)
 }

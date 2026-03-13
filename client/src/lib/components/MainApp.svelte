@@ -4,6 +4,8 @@
 	import IconRail from './IconRail.svelte';
 	import ContextPanel from './ContextPanel.svelte';
 	import Chat from './Chat.svelte';
+	import Feed from './Feed.svelte';
+	import ProfilePage from './ProfilePage.svelte';
 	import ConnectionModal from './ConnectionModal.svelte';
 	import Toast from './Toast.svelte';
 	import VoiceCall from './VoiceCall.svelte';
@@ -13,6 +15,7 @@
 	let showConnectionModal = $state(false);
 	let activeView = $state('home');
 	let previousView = $state('home');
+	let viewingProfile = $state<string | null>(null);
 
 	interface DbConversation {
 		id: string;
@@ -45,15 +48,23 @@
 
 	function handleViewChange(view: string) {
 		// Toggle: clicking the same view goes back to previous
-		if (view === activeView && (view === 'settings' || view === 'friends' || view === 'create')) {
+		if (view === activeView && (view === 'settings' || view === 'friends' || view === 'create' || view === 'feed')) {
 			activeView = previousView;
 			return;
 		}
 		previousView = activeView;
 		activeView = view;
+		viewingProfile = null;
 		if (view.startsWith('channel:')) {
 			activeConversationStore.set(view.slice(8));
 		}
+		if (view === 'feed') {
+			activeConversationStore.set(null);
+		}
+	}
+
+	function openProfile(pubkey: string) {
+		viewingProfile = pubkey;
 	}
 
 	function handleSelect(id: string) {
@@ -85,7 +96,15 @@
 
 	<!-- Main Area -->
 	<div class="flex-1 flex flex-col bg-background">
-		{#if $activeConversationStore}
+		{#if viewingProfile}
+			<ProfilePage
+				pubkey={viewingProfile}
+				onclose={() => viewingProfile = null}
+				oncompose={() => { viewingProfile = null; activeView = 'feed'; }}
+			/>
+		{:else if activeView === 'feed'}
+			<Feed onprofile={openProfile} />
+		{:else if $activeConversationStore}
 			<Chat />
 		{:else}
 			<div class="flex h-full items-center justify-center">

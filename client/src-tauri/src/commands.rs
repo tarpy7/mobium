@@ -2378,3 +2378,144 @@ pub async fn update_channel_info(
     })).map_err(|e| e.to_string())?;
     conn.send(msg).await.map_err(|e| e.to_string())
 }
+
+// ── Profile ───────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn update_profile(
+    display_name: String,
+    bio: String,
+    avatar_hash: String,
+    banner_hash: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "update_profile",
+        "display_name": display_name,
+        "bio": bio,
+        "avatar_hash": avatar_hash,
+        "banner_hash": banner_hash,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_profile(
+    pubkey: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pk_bytes = crate::validate::validate_pubkey_hex(&pubkey)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_profile", "pubkey": pk_bytes,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+// ── Posts ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn create_post(
+    content: String,
+    media_hash: Option<String>,
+    media_type: Option<String>,
+    media_size: Option<i64>,
+    visibility: String,
+    reply_to: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if content.len() > 4096 { return Err("Post too long".to_string()); }
+    // Enforce 15s video limit client-side via media_type check
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "create_post",
+        "content": content,
+        "media_hash": media_hash,
+        "media_type": media_type,
+        "media_size": media_size,
+        "visibility": visibility,
+        "reply_to": reply_to,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_post(
+    post_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "delete_post", "post_id": post_id,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_user_posts(
+    pubkey: String,
+    limit: Option<i64>,
+    before: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pk_bytes = crate::validate::validate_pubkey_hex(&pubkey)?;
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_user_posts", "pubkey": pk_bytes,
+        "limit": limit.unwrap_or(20), "before": before,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_feed(
+    friend_pubkeys: Vec<String>,
+    limit: Option<i64>,
+    before: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "get_feed",
+        "friend_pubkeys": friend_pubkeys,
+        "limit": limit.unwrap_or(20),
+        "before": before,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn react_post(
+    post_id: String,
+    emoji: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "react_post", "post_id": post_id, "emoji": emoji,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn upload_media(
+    data: Vec<u8>,
+    mime_type: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if data.len() > 10 * 1024 * 1024 { return Err("File too large (max 10MB)".to_string()); }
+    let conn = state.connection.read().await;
+    let conn = conn.as_ref().ok_or("Not connected")?;
+    let msg = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "upload_media", "data": data, "mime_type": mime_type,
+    })).map_err(|e| e.to_string())?;
+    conn.send(msg).await.map_err(|e| e.to_string())
+}

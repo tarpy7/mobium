@@ -142,6 +142,14 @@ fn main() {
             commands::join_channel_with_password,
             commands::get_channel_info,
             commands::update_channel_info,
+            commands::update_profile,
+            commands::get_profile,
+            commands::create_post,
+            commands::delete_post,
+            commands::get_user_posts,
+            commands::get_feed,
+            commands::react_post,
+            commands::upload_media,
             
             // DM / X3DH
             commands::publish_prekeys,

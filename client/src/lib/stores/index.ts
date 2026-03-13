@@ -93,6 +93,35 @@ export interface ChannelInfo {
 }
 export const channelInfoStore = writable<Map<string, ChannelInfo>>(new Map());
 
+// ── Profiles ──
+export interface UserProfile {
+	pubkey: string;
+	username: string | null;
+	displayName: string;
+	bio: string;
+	avatarHash: string;
+	bannerHash: string;
+	customFields: string;
+	updatedAt: number;
+}
+export const profilesStore = writable<Map<string, UserProfile>>(new Map());
+
+// ── Posts ──
+export interface Post {
+	id: string;
+	authorPubkey: string;
+	content: string;
+	mediaHash: string | null;
+	mediaType: string | null;
+	mediaSize: number | null;
+	visibility: 'public' | 'friends' | 'private';
+	replyTo: string | null;
+	createdAt: number;
+	reactions?: { pubkey: string; emoji: string }[];
+}
+export const feedStore = writable<Post[]>([]);
+export const userPostsStore = writable<Map<string, Post[]>>(new Map());
+
 /** Get display name for a pubkey */
 export function displayName(pubkey: string): string {
 	// 1. Local nickname (highest priority — user explicitly set this)

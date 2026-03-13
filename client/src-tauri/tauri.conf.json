@@ -27,7 +27,7 @@
   },
   "identifier": "com.bonchi.app",
   "productName": "Bonchi",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "plugins": {
     "shell": {
       "open": "^https://"

@@ -466,6 +466,18 @@ async fn handle_binary_message(
         // Channel info
         "get_channel_info" => handle_get_channel_info(&msg, conn, state).await,
         "update_channel_info" => handle_update_channel_info(&msg, conn, state).await,
+        // Profiles & posts
+        "update_profile" => handle_update_profile(&msg, conn, state).await,
+        "get_profile" => handle_get_profile(&msg, conn, state).await,
+        "create_post" => handle_create_post(&msg, conn, state).await,
+        "delete_post" => handle_delete_post(&msg, conn, state).await,
+        "get_user_posts" => handle_get_user_posts(&msg, conn, state).await,
+        "get_feed" => handle_get_feed(&msg, conn, state).await,
+        "react_post" => handle_react_post(&msg, conn, state).await,
+        "unreact_post" => handle_unreact_post(&msg, conn, state).await,
+        // Media
+        "upload_media" => handle_upload_media(&msg, conn, state).await,
+        "get_media" => handle_get_media(&msg, conn, state).await,
         "ping" => {
             let pong = rmp_serde::to_vec_named(&serde_json::json!({"type": "pong"}))?;
             conn.tx.send(pong).await?;
@@ -2085,5 +2097,320 @@ async fn handle_update_channel_info(
     }
 
     info!("Channel {} info updated by owner", hex::encode(&channel_id[..8.min(channel_id.len())]));
+    Ok(())
+}
+
+// ── Profiles ────────────────────────────────────────────────────────
+
+async fn handle_update_profile(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let display_name = msg.get("display_name").and_then(|v| v.as_str()).unwrap_or("");
+    let bio = msg.get("bio").and_then(|v| v.as_str()).unwrap_or("");
+    let avatar_hash = msg.get("avatar_hash").and_then(|v| v.as_str()).unwrap_or("");
+    let banner_hash = msg.get("banner_hash").and_then(|v| v.as_str()).unwrap_or("");
+    let custom_fields = msg.get("custom_fields").and_then(|v| v.as_str()).unwrap_or("{}");
+
+    // Limit lengths
+    if bio.len() > 2048 { anyhow::bail!("Bio too long (max 2048 chars)"); }
+    if display_name.len() > 64 { anyhow::bail!("Display name too long (max 64 chars)"); }
+
+    database::upsert_profile(&state.db_pool, user, display_name, bio, avatar_hash, banner_hash, custom_fields).await?;
+
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "profile_updated",
+        "pubkey": hex::encode(user),
+        "display_name": display_name,
+        "bio": bio,
+        "avatar_hash": avatar_hash,
+        "banner_hash": banner_hash,
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_get_profile(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let _user = require_auth(conn)?;
+    let target = extract_bytes(msg.get("pubkey"))
+        .ok_or_else(|| anyhow::anyhow!("Missing pubkey"))?;
+
+    let profile = database::get_profile(&state.db_pool, &target).await?;
+    let username = database::get_username(&state.db_pool, &target).await?;
+
+    let resp = if let Some((display_name, bio, avatar_hash, banner_hash, custom_fields, updated_at)) = profile {
+        serde_json::json!({
+            "type": "profile_data",
+            "pubkey": hex::encode(&target),
+            "username": username,
+            "display_name": display_name,
+            "bio": bio,
+            "avatar_hash": avatar_hash,
+            "banner_hash": banner_hash,
+            "custom_fields": custom_fields,
+            "updated_at": updated_at,
+        })
+    } else {
+        serde_json::json!({
+            "type": "profile_data",
+            "pubkey": hex::encode(&target),
+            "username": username,
+            "display_name": "",
+            "bio": "",
+            "avatar_hash": "",
+            "banner_hash": "",
+            "custom_fields": "{}",
+            "updated_at": 0,
+        })
+    };
+    conn.tx.send(rmp_serde::to_vec_named(&resp)?).await?;
+    Ok(())
+}
+
+// ── Posts ────────────────────────────────────────────────────────────
+
+async fn handle_create_post(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    if content.is_empty() && msg.get("media_hash").is_none() {
+        anyhow::bail!("Post must have content or media");
+    }
+    if content.len() > 4096 { anyhow::bail!("Post too long (max 4096 chars)"); }
+
+    let visibility = msg.get("visibility").and_then(|v| v.as_str()).unwrap_or("friends");
+    if !["public", "friends", "private"].contains(&visibility) {
+        anyhow::bail!("Invalid visibility");
+    }
+
+    let media_hash = msg.get("media_hash").and_then(|v| v.as_str());
+    let media_type = msg.get("media_type").and_then(|v| v.as_str());
+    let media_size = msg.get("media_size").and_then(|v| v.as_i64());
+    let reply_to = msg.get("reply_to").and_then(|v| v.as_str());
+
+    // Generate post ID
+    let id = format!("{}-{}", hex::encode(&user[..8]), chrono::Utc::now().timestamp_millis());
+
+    database::create_post(
+        &state.db_pool, &id, user, content,
+        media_hash, media_type, media_size,
+        visibility, reply_to,
+    ).await?;
+
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "post_created",
+        "id": id,
+        "author_pubkey": hex::encode(user),
+        "content": content,
+        "media_hash": media_hash,
+        "media_type": media_type,
+        "media_size": media_size,
+        "visibility": visibility,
+        "reply_to": reply_to,
+        "created_at": chrono::Utc::now().timestamp(),
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_delete_post(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let post_id = msg.get("post_id").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing post_id"))?;
+    let deleted = database::delete_post(&state.db_pool, post_id, user).await?;
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "post_deleted",
+        "post_id": post_id,
+        "success": deleted,
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_get_user_posts(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let _user = require_auth(conn)?;
+    let target = extract_bytes(msg.get("pubkey"))
+        .ok_or_else(|| anyhow::anyhow!("Missing pubkey"))?;
+    let limit = msg.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).min(50);
+    let before = msg.get("before").and_then(|v| v.as_i64());
+
+    let posts = database::get_user_posts(&state.db_pool, &target, limit, before).await?;
+    let posts_json: Vec<serde_json::Value> = posts.into_iter().map(|(id, author, content, mhash, mtype, msize, vis, reply, ts)| {
+        serde_json::json!({
+            "id": id,
+            "author_pubkey": hex::encode(&author),
+            "content": content,
+            "media_hash": mhash,
+            "media_type": mtype,
+            "media_size": msize,
+            "visibility": vis,
+            "reply_to": reply,
+            "created_at": ts,
+        })
+    }).collect();
+
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "user_posts",
+        "pubkey": hex::encode(&target),
+        "posts": posts_json,
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_get_feed(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let limit = msg.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).min(50);
+    let before = msg.get("before").and_then(|v| v.as_i64());
+
+    // Friend pubkeys come from the client (friends are stored locally)
+    let friend_pks: Vec<Vec<u8>> = msg.get("friend_pubkeys")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter().filter_map(|v| {
+                v.as_str().and_then(|s| hex::decode(s).ok())
+            }).collect()
+        })
+        .unwrap_or_default();
+
+    // Include own posts in feed
+    let mut all_pks = friend_pks;
+    all_pks.push(user.to_vec());
+
+    let posts = database::get_feed_posts(&state.db_pool, &all_pks, limit, before).await?;
+    let posts_json: Vec<serde_json::Value> = posts.into_iter().map(|(id, author, content, mhash, mtype, msize, vis, reply, ts)| {
+        serde_json::json!({
+            "id": id,
+            "author_pubkey": hex::encode(&author),
+            "content": content,
+            "media_hash": mhash,
+            "media_type": mtype,
+            "media_size": msize,
+            "visibility": vis,
+            "reply_to": reply,
+            "created_at": ts,
+        })
+    }).collect();
+
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "feed_posts",
+        "posts": posts_json,
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_react_post(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let post_id = msg.get("post_id").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing post_id"))?;
+    let emoji = msg.get("emoji").and_then(|v| v.as_str()).unwrap_or("❤️");
+    database::react_to_post(&state.db_pool, post_id, user, emoji).await?;
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "post_reacted", "post_id": post_id, "emoji": emoji,
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_unreact_post(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let post_id = msg.get("post_id").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing post_id"))?;
+    database::unreact_to_post(&state.db_pool, post_id, user).await?;
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "post_unreacted", "post_id": post_id,
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+// ── Media ────────────────────────────────────────────────────────────
+
+const MAX_MEDIA_SIZE: usize = 10 * 1024 * 1024; // 10MB
+
+async fn handle_upload_media(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let user = require_auth(conn)?;
+    let data = extract_bytes(msg.get("data"))
+        .ok_or_else(|| anyhow::anyhow!("Missing data"))?;
+    let mime_type = msg.get("mime_type").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing mime_type"))?;
+
+    if data.len() > MAX_MEDIA_SIZE {
+        anyhow::bail!("Media too large (max 10MB)");
+    }
+
+    // Content-address with blake3
+    let hash = blake3::hash(&data).to_hex().to_string();
+
+    database::store_media(&state.db_pool, &hash, &data, mime_type, user).await?;
+
+    let resp = rmp_serde::to_vec_named(&serde_json::json!({
+        "type": "media_uploaded",
+        "hash": hash,
+        "size": data.len(),
+    }))?;
+    conn.tx.send(resp).await?;
+    Ok(())
+}
+
+async fn handle_get_media(
+    msg: &serde_json::Value,
+    conn: &Connection,
+    state: &Arc<ServerState>,
+) -> anyhow::Result<()> {
+    let _user = require_auth(conn)?;
+    let hash = msg.get("hash").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing hash"))?;
+
+    let media = database::get_media(&state.db_pool, hash).await?;
+    let resp = if let Some((data, mime_type)) = media {
+        serde_json::json!({
+            "type": "media_data",
+            "hash": hash,
+            "data": data,
+            "mime_type": mime_type,
+        })
+    } else {
+        serde_json::json!({
+            "type": "server_error",
+            "code": "media_not_found",
+            "message": "Media not found",
+        })
+    };
+    conn.tx.send(rmp_serde::to_vec_named(&resp)?).await?;
     Ok(())
 }
