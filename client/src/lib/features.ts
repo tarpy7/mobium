@@ -102,7 +102,7 @@ function validateKey(key: string): boolean {
 	// Future format: base64(nonce:expiry:tier:hmac)
 	// For now, simple key check
 	const normalized = key.trim().toLowerCase();
-	return normalized === 'harmonyrocks';
+	return normalized === 'yeeyee';
 }
 
 /**
