@@ -149,7 +149,7 @@
 {#if isLoading}
 	<div class="flex h-full items-center justify-center">
 		<div class="text-center">
-			<div class="mb-2 text-3xl font-bold text-primary">Mobium</div>
+			<div class="mb-2 text-3xl font-bold text-primary">Bonchi</div>
 			<div class="animate-pulse text-text-muted">Initializing...</div>
 		</div>
 	</div>

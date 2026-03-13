@@ -221,7 +221,7 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between px-4 py-3 border-b border-surface-light/20">
 		<div class="flex items-center gap-2">
-			<span class="text-lg font-bold text-primary">Mobium</span>
+			<span class="text-lg font-bold text-primary">Bonchi</span>
 			<span class="flex h-2 w-2 rounded-full {$connectionStore.connected ? 'bg-accent' : 'bg-danger'}"></span>
 		</div>
 		<button

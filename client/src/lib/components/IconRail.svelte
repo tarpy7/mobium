@@ -17,10 +17,10 @@
 </script>
 
 <div class="flex h-full w-[52px] flex-col items-center bg-surface border-r border-surface-light/20 py-2 gap-1">
-	<!-- Mobium Logo -->
+	<!-- Bonchi Logo -->
 	<div class="flex h-10 w-10 items-center justify-center mb-1">
 		<div class="flex h-9 w-9 items-center justify-center rounded-xl font-black text-base tracking-tight text-white" style="background: linear-gradient(135deg, #e07a5f 0%, #b8a9c9 50%, #81b29a 100%);">
-			M
+			B
 		</div>
 	</div>
 

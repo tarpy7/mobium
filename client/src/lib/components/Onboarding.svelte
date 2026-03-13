@@ -35,7 +35,7 @@
 		const age = (now.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
 
 		if (age < 13) {
-			ageError = 'You must be at least 13 years old to use Mobium.';
+			ageError = 'You must be at least 13 years old to use Bonchi.';
 			return;
 		}
 
@@ -133,12 +133,13 @@
 		{#if step === 'age'}
 			<div class="text-center">
 				<div class="mb-6">
-					<div class="mb-2 text-3xl font-bold text-primary">Mobium</div>
+					<div class="mb-1 text-3xl font-bold text-primary">Bonchi</div>
+					<div class="text-xs text-text-muted/50 mb-2">Built on Mobium</div>
 					<div class="text-sm text-text-muted">Before we begin</div>
 				</div>
 
 				<p class="mb-6 text-sm text-text-muted">
-					Mobium requires users to be at least 13 years old.<br>
+					Bonchi requires users to be at least 13 years old.<br>
 					Please confirm your age to continue.
 				</p>
 
@@ -191,7 +192,8 @@
 		{:else if step === 'welcome'}
 			<div class="text-center">
 				<div class="mb-6">
-					<div class="mb-2 text-3xl font-bold text-primary">Mobium</div>
+					<div class="mb-1 text-3xl font-bold text-primary">Bonchi</div>
+					<div class="text-xs text-text-muted/50 mb-2">Built on Mobium</div>
 					<div class="text-sm text-text-muted">Zero-knowledge encrypted messaging</div>
 				</div>
 

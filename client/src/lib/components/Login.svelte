@@ -46,7 +46,8 @@
 <div class="flex h-full items-center justify-center p-8">
 	<div class="w-full max-w-sm rounded-2xl bg-surface p-8 shadow-2xl border border-surface-light/30">
 		<div class="text-center mb-6">
-			<div class="mb-1 text-3xl font-bold text-primary">Mobium</div>
+			<div class="mb-1 text-3xl font-bold text-primary">Bonchi</div>
+			<div class="text-xs text-text-muted/50 mb-1">Built on Mobium</div>
 			<div class="text-sm text-text-muted">Welcome back</div>
 		</div>
 

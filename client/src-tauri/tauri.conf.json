@@ -9,7 +9,7 @@
   "bundle": {
     "active": true,
     "category": "SocialNetworking",
-    "copyright": "2025 Mobium Contributors",
+    "copyright": "2025 Bonchi \u2014 Built on Mobium",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -25,9 +25,9 @@
       "timestampUrl": ""
     }
   },
-  "identifier": "com.mobium.app",
-  "productName": "Mobium",
-  "version": "0.2.3",
+  "identifier": "com.bonchi.app",
+  "productName": "Bonchi",
+  "version": "0.3.0",
   "plugins": {
     "shell": {
       "open": "^https://"
@@ -42,7 +42,7 @@
         "fullscreen": false,
         "height": 800,
         "resizable": true,
-        "title": "Mobium",
+        "title": "Bonchi",
         "width": 1200
       }
     ],
