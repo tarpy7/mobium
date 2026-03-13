@@ -137,6 +137,25 @@
 	// ── Settings ──
 	let redeemInput = $state('');
 	let redeemError = $state('');
+	let newUsername = $state('');
+	let settingUsername = $state(false);
+	let usernameError = $state('');
+
+	async function setUsername() {
+		const name = newUsername.trim();
+		if (!name || settingUsername) return;
+		settingUsername = true;
+		usernameError = '';
+		try {
+			await invoke('set_username', { username: name });
+			usernameStore.set(name);
+			newUsername = '';
+			addToast('Username set!', 'success');
+		} catch (e) {
+			usernameError = String(e).replace('Error: ', '');
+		}
+		settingUsername = false;
+	}
 
 	async function tryRedeem() {
 		const result = redeemKey(redeemInput.trim());
@@ -353,7 +372,20 @@
 			<!-- Username -->
 			<div>
 				<div class="text-[10px] font-bold uppercase tracking-wider text-text-muted/50 mb-1">Username</div>
-				<div class="text-sm text-text">{$usernameStore || 'Not set'}</div>
+				{#if $usernameStore}
+					<div class="text-sm text-text">{$usernameStore}</div>
+				{:else}
+					<div class="flex gap-1.5">
+						<input type="text" bind:value={newUsername} placeholder="Choose a username…" maxlength="32"
+							onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') setUsername(); }}
+							class="flex-1 rounded-lg bg-background/50 px-2.5 py-1.5 text-xs text-text outline-none ring-1 ring-surface-light/30 focus:ring-primary/50" />
+						<button onclick={setUsername} disabled={!newUsername.trim() || settingUsername}
+							class="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition disabled:opacity-50">
+							{settingUsername ? '…' : 'Set'}
+						</button>
+					</div>
+					{#if usernameError}<div class="text-xs text-danger mt-1">{usernameError}</div>{/if}
+				{/if}
 			</div>
 			<!-- Identity -->
 			<div>
